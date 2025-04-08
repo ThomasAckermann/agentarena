@@ -25,4 +25,4 @@ if __name__ == "__main__":
                 game.running = False
 
         game.update()
-        clock.tick(10)
+        clock.tick(15)
