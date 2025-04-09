@@ -5,6 +5,7 @@ from datetime import datetime
 import pygame
 from agent.agent import Agent
 
+from game.action import Action
 from game.level import Level
 from game.player import Player
 
@@ -27,7 +28,7 @@ class Game:
         self.episode_log: list[dict] = []
         self.enemy_count: int = enemy_count
         self.player: Player | None = None
-        self.enemies: list[Player] | None = None
+        self.enemies: list[Player] = []
         self.reset()
 
     def reset(self) -> None:
@@ -46,9 +47,13 @@ class Game:
         ]
         player_orientation = [0, 1]
 
-        self.player = Player(player_position, player_orientation, self.player_agent)
+        self.player = Player(
+            player_position,
+            player_orientation,
+            self.player_agent,
+        )
 
-    def create_enemies(self, enemy_count) -> None:
+    def create_enemies(self) -> None:
         for i in range(self.enemy_count):
             enemy_position = [
                 random.randint(0, self.grid_size - 1),
@@ -87,14 +92,14 @@ class Game:
             self.running = False
             return
 
-        player_obs = self.get_observation("player")
-        player_action = self.player.agent.get_action(player_obs)
-        self.apply_action("player", self.player_pos, player_action)
+        player_observation = self.get_observation("player")
+        player_action = self.player.agent.get_action(player_observation)
+        self.apply_action("player", self.player, player_action)
 
         for i, enemy in enumerate(self.enemies):
-            obs = self.get_observation(f"enemy_{i}")
-            action = enemy["agent"].get_action(obs)
-            self.apply_action(f"enemy_{i}", enemy["pos"], action)
+            enemy_observation = self.get_observation(f"enemy_{i}")
+            enemy_action = enemy.agent.get_action(enemy_observation)
+            self.apply_action(f"enemy_{i}", enemy, enemy_action)
 
         self.move_bullets()
         self.check_collisions()
@@ -108,53 +113,53 @@ class Game:
         )
         self.render()
 
-    def apply_action(self, agent_type, player: Player) -> None:
-        direction_attr = "player_direction" if agent_type == "player" else None
-        if "enemy_" in agent_type:
-            idx = int(agent_type.replace("enemy_", ""))
-            direction_attr = self.enemies[idx]["dir"]
+    def apply_action(
+        self,
+        agent_id: str,
+        player: Player,
+        action: Action,
+    ) -> None:
+        """Apply an action to the specified player"""
 
-        if action in ["UP", "DOWN", "LEFT", "RIGHT"]:
-            if agent_type == "player":
-                self.player_direction = action
-            else:
-                self.enemies[idx]["dir"] = action
+        # Move action
+        if action.direction is not None:
+            # Get the direction vector
+            dx, dy = action.get_direction_vector()
 
-            dx, dy = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}[
-                action
-            ]
-            new_x = max(0, min(self.grid_size - 1, entity_pos[0] + dx))
-            new_y = max(0, min(self.grid_size - 1, entity_pos[1] + dy))
+            # Update player orientation based on movement direction
+            player.orientation = [dx, dy]
 
-            if (new_x, new_y) not in self.walls:
-                entity_pos[0] = new_x
-                entity_pos[1] = new_y
+            # Calculate new position with boundary checks
+            new_x = max(0, min(self.grid_size - 1, player.position[0] + dx))
+            new_y = max(0, min(self.grid_size - 1, player.position[1] + dy))
 
-        elif action == "SHOOT":
-            direction = (
-                self.player_direction
-                if agent_type == "player"
-                else self.enemies[idx]["dir"]
-            )
-            if agent_type == "player":
-                if self.player_shots < 3 and self.player_cooldown == 0:
-                    self.bullets.append(
-                        {"pos": list(entity_pos), "dir": direction, "owner": "player"}
-                    )
-                    self.player_shots += 1
-                    if self.player_shots == 3:
-                        self.player_cooldown = 5
-            else:
+            # Check for wall collisions
+            if (new_x, new_y) not in self.level.walls:
+                player.position[0] = new_x
+                player.position[1] = new_y
+
+        # Shoot action
+        if action.is_shooting is True:
+            dx, dy = player.orientation
+
+            # Check if player can shoot (for cooldown/ammo logic)
+            if player.ammunition < 3 and player.cooldown == 0:
                 self.bullets.append(
-                    {"pos": list(entity_pos), "dir": direction, "owner": agent_type}
+                    {
+                        "pos": list(player.position),
+                        "dir": [dx, dy],
+                        "owner": agent_id,
+                    }
                 )
+                player.ammunition += 1
+                if player.ammunition == 3:
+                    player.cooldown = 5
 
     def move_bullets(self):
         new_bullets = []
         for bullet in self.bullets:
-            dx, dy = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}[
-                bullet["dir"]
-            ]
+            # Use the direction vector directly
+            dx, dy = bullet["dir"]
             new_x = bullet["pos"][0] + dx
             new_y = bullet["pos"][1] + dy
 
@@ -163,7 +168,7 @@ class Game:
                 continue
 
             # Check wall collision
-            if (new_x, new_y) in self.walls:
+            if (new_x, new_y) in self.level.walls:
                 continue  # Bullet is destroyed on impact
 
             # If no collision, move bullet
@@ -172,32 +177,32 @@ class Game:
 
         self.bullets = new_bullets
 
-        if self.player_cooldown > 0:
-            self.player_cooldown -= 1
-        if self.player_cooldown == 0:
-            self.player_shots = 0
+        # Update player cooldown and shot count
+        if self.player.cooldown > 0:
+            self.player.cooldown -= 1
+        if self.player.cooldown == 0:
+            self.player.ammunition = 0
 
     def check_collisions(self) -> None:
         for bullet in self.bullets[:]:
             if bullet["owner"] == "player":
                 for i, enemy in enumerate(self.enemies):
-                    if bullet["pos"] == enemy["pos"]:
+                    if bullet["pos"] == enemy.position:
                         self.events.append({"type": "enemy_hit", "enemy_id": i})
-                        enemy["health"] -= 1
+                        enemy.health -= 1
                         self.bullets.remove(bullet)
-                        if enemy["health"] <= 0:
+                        if enemy.health <= 0:
                             print(f"Enemy {i} defeated")
                             del self.enemies[i]
                         break
             else:
-                if bullet["pos"] == self.player_pos:
+                if bullet["pos"] == self.player.position:
                     self.events.append({"type": "player_hit"})
-                    self.player_health -= 1
-                    print(f"Player hit! Health: {self.player_health}")
+                    self.player.health -= 1
+                    print(f"Player hit! Health: {self.player.health}")
                     self.bullets.remove(bullet)
 
     def load_textures(self) -> None:
-        self.tile_size = 40
         self.player_texture = pygame.image.load("assets/player.png").convert_alpha()
         self.enemy_texture = pygame.image.load("assets/enemy.png").convert_alpha()
         self.wall_texture = pygame.image.load("assets/wall.png").convert_alpha()
@@ -215,14 +220,15 @@ class Game:
     def render(self) -> None:
         if self.headless:
             return
+        self.tile_size = 40
 
         self.screen.fill((0, 0, 0))
-        self.load_textures()
+        # self.load_textures()
         pygame.draw.rect(
             self.screen,
             (0, 255, 0),
             (
-                *[x * self.tile_size for x in self.player_pos],
+                *[x * self.tile_size for x in self.player.position],
                 self.tile_size,
                 self.tile_size,
             ),
@@ -233,7 +239,7 @@ class Game:
                 self.screen,
                 (255, 0, 0),
                 (
-                    *[x * self.tile_size for x in enemy["pos"]],
+                    *[x * self.tile_size for x in enemy.position],
                     self.tile_size,
                     self.tile_size,
                 ),
@@ -249,7 +255,7 @@ class Game:
                     self.tile_size // 2,
                 ),
             )
-        for wall in self.walls:
+        for wall in self.level.walls:
             rect = pygame.Rect(
                 wall[1] * self.tile_size,
                 wall[0] * self.tile_size,
@@ -259,7 +265,7 @@ class Game:
             pygame.draw.rect(self.screen, (100, 100, 100), rect)
 
         font = pygame.font.SysFont(None, 30)
-        text = font.render(f"HP: {self.player_health}", True, (255, 255, 255))
+        text = font.render(f"HP: {self.player.health}", True, (255, 255, 255))
         self.screen.blit(text, (10, 10))
 
         pygame.display.flip()

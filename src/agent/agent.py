@@ -1,14 +1,17 @@
-class Agent:
-    def __init__(self, name="Agent"):
-        self.name = name
+from game.action import Action
 
-    def reset(self):
+
+class Agent:
+    def __init__(self, name: str = "Agent"):
+        self.name: str = name
+
+    def reset(self) -> None:
         """Called at the start of a stage"""
         pass
 
-    def get_action(self, observation):
+    def get_action(self, observation) -> Action:
         """
         Outputs the next action based on the current state of the game.
-        return: action ("UP", "DOWN", "LEFT", "RIGHT", "SHOOT")
+        return: action
         """
         raise NotImplementedError
