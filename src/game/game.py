@@ -14,66 +14,81 @@ class Game:
         self,
         screen,
         headless: bool,
-        player: Player,
+        player_agent: Agent,
+        enemy_agent: Agent,
         grid_size: int = 15,
+        enemy_count: int = 1,
     ) -> None:
         self.screen = screen
         self.headless: bool = headless
-        self.player: Player = player
+        self.player_agent: Agent = player_agent
+        self.enemy_agent: Agent = enemy_agent
         self.grid_size: int = grid_size
-        self.walls: set = set()
         self.episode_log: list[dict] = []
-        self.level = Level(self.player)
+        self.enemy_count: int = enemy_count
+        self.player: Player | None = None
+        self.enemies: list[Player] | None = None
         self.reset()
 
     def reset(self) -> None:
+        self.create_player()
+        self.create_enemies()
+        self.level: Level = Level(self.player, self.enemies, self.grid_size)
         self.level.generate_level()
-
-        self.player_pos = self.level["player_start"]
-        self.player_direction = "UP"
-        self.player.health = 3
-        self.player_shots = 0
-        self.player_cooldown = 0
         self.events: int = []
-
-        self.enemies = [
-            {"agent": self.enemy_agent, "pos": pos, "dir": "DOWN", "health": 2}
-            for pos in self.level["enemy_starts"]
-        ]
-
         self.bullets = []
         self.running = True
+
+    def create_player(self):
+        player_position = [
+            random.randint(0, self.grid_size - 1),
+            random.randint(0, self.grid_size - 1),
+        ]
+        player_orientation = [0, 1]
+
+        self.player = Player(player_position, player_orientation, self.player_agent)
+
+    def create_enemies(self, enemy_count) -> None:
+        for i in range(self.enemy_count):
+            enemy_position = [
+                random.randint(0, self.grid_size - 1),
+                random.randint(0, self.grid_size - 1),
+            ]
+            enemy_orientation = [0, 1]
+            self.enemies.append(
+                Player(enemy_position, enemy_orientation, self.enemy_agent)
+            )
 
     def get_observation(self, agent_id: str = "player") -> dict:
         if agent_id == "player":
             return {
-                "player": tuple(self.player_pos),
-                "player_dir": self.player_direction,
-                "enemies": [tuple(enemy["pos"]) for enemy in self.enemies],
+                "player": tuple(self.player.position),
+                "player_dir": self.player.orientation,
+                "enemies": [tuple(enemy.position) for enemy in self.enemies],
                 "bullets": self.bullets,
-                "health": self.player_health,
+                "health": self.player.health,
             }
         else:
             idx = int(agent_id.replace("enemy_", ""))
             enemy = self.enemies[idx]
             return {
-                "player": enemy["pos"],
-                "player_dir": enemy["dir"],
-                "enemies": [self.player_pos],
+                "player": enemy.position,
+                "player_dir": enemy.orientation,
+                "enemies": [self.player.position],
                 "bullets": self.bullets,
-                "health": enemy["health"],
+                "health": enemy.health,
             }
 
     def update(self) -> None:
         self.events = []
-        if self.player_health <= 0:
+        if self.player.health <= 0:
             print("Game Over! Player defeated.")
             self.save_episode_log()
             self.running = False
             return
 
         player_obs = self.get_observation("player")
-        player_action = self.player_agent.get_action(player_obs)
+        player_action = self.player.agent.get_action(player_obs)
         self.apply_action("player", self.player_pos, player_action)
 
         for i, enemy in enumerate(self.enemies):
@@ -93,7 +108,7 @@ class Game:
         )
         self.render()
 
-    def apply_action(self, agent_type, entity_pos, action: str) -> None:
+    def apply_action(self, agent_type, player: Player) -> None:
         direction_attr = "player_direction" if agent_type == "player" else None
         if "enemy_" in agent_type:
             idx = int(agent_type.replace("enemy_", ""))
