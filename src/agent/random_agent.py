@@ -16,8 +16,8 @@ class RandomAgent(Agent):
                 Direction.RIGHT,
                 Direction.TOP_LEFT,
                 Direction.TOP_RIGHT,
-                Direction.BOTTOM_LEFT,
-                Direction.BOTTOM_RIGHT,
+                Direction.DOWN_LEFT,
+                Direction.DOWN_RIGHT,
             ]
         )
         return Action(is_shooting=is_shooting, direction=direction)

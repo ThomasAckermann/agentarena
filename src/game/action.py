@@ -10,8 +10,8 @@ class Direction(str, Enum):
     RIGHT = "right"
     TOP_LEFT = "top_left"
     TOP_RIGHT = "top_right"
-    BOTTOM_LEFT = "bottom_left"
-    BOTTOM_RIGHT = "bottom_right"
+    DOWN_LEFT = "bottom_left"
+    DOWN_RIGHT = "bottom_right"
 
 
 DIRECTION_VECTORS: dict[Direction, tuple[int, int]] = {
@@ -21,8 +21,8 @@ DIRECTION_VECTORS: dict[Direction, tuple[int, int]] = {
     Direction.RIGHT: (1, 0),
     Direction.TOP_LEFT: (-1, -1),
     Direction.TOP_RIGHT: (1, -1),
-    Direction.BOTTOM_LEFT: (-1, 1),
-    Direction.BOTTOM_RIGHT: (1, 1),
+    Direction.DOWN_LEFT: (-1, 1),
+    Direction.DOWN_RIGHT: (1, 1),
 }
 
 

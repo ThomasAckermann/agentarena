@@ -29,6 +29,8 @@ class Game:
         self.enemy_count: int = enemy_count
         self.player: Player | None = None
         self.enemies: list[Player] = []
+        self.tile_size = 40
+        self.load_textures()
         self.reset()
 
     def reset(self) -> None:
@@ -202,75 +204,66 @@ class Game:
                     print(f"Player hit! Health: {self.player.health}")
                     self.bullets.remove(bullet)
 
-    def load_textures(self) -> None:
-        self.player_texture = pygame.image.load("assets/player.png").convert_alpha()
-        self.enemy_texture = pygame.image.load("assets/enemy.png").convert_alpha()
-        self.wall_texture = pygame.image.load("assets/wall.png").convert_alpha()
+    def save_episode_log(self):
+        filename = f"data/episode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filename, "w") as f:
+            json.dump(self.episode_log, f)
 
-        self.player_texture = pygame.transform.scale(
-            self.player_texture, (self.tile_size, self.tile_size)
-        )
-        self.enemy_texture = pygame.transform.scale(
-            self.enemy_texture, (self.tile_size, self.tile_size)
-        )
-        self.wall_texture = pygame.transform.scale(
-            self.wall_texture, (self.tile_size, self.tile_size)
-        )
+    def load_textures(self):
+        self.textures = {
+            "player": pygame.transform.scale(
+                pygame.image.load("assets/player.png"), (self.tile_size, self.tile_size)
+            ),
+            "enemy": pygame.transform.scale(
+                pygame.image.load("assets/enemy.png"), (self.tile_size, self.tile_size)
+            ),
+            "bullet": pygame.transform.scale(
+                pygame.image.load("assets/bullet.png"),
+                (self.tile_size // 2, self.tile_size // 2),
+            ),
+            "wall": pygame.transform.scale(
+                pygame.image.load("assets/wall.png"), (self.tile_size, self.tile_size)
+            ),
+        }
 
     def render(self) -> None:
         if self.headless:
             return
-        self.tile_size = 40
 
         self.screen.fill((0, 0, 0))
-        # self.load_textures()
-        pygame.draw.rect(
-            self.screen,
-            (0, 255, 0),
-            (
-                *[x * self.tile_size for x in self.player.position],
-                self.tile_size,
-                self.tile_size,
-            ),
+
+        # Draw player
+        px, py = self.player.position
+        self.screen.blit(
+            self.textures["player"], (px * self.tile_size, py * self.tile_size)
         )
 
+        # Draw enemies
         for enemy in self.enemies:
-            pygame.draw.rect(
-                self.screen,
-                (255, 0, 0),
-                (
-                    *[x * self.tile_size for x in enemy.position],
-                    self.tile_size,
-                    self.tile_size,
-                ),
+            ex, ey = enemy.position
+            self.screen.blit(
+                self.textures["enemy"], (ex * self.tile_size, ey * self.tile_size)
             )
 
+        # Draw bullets
         for bullet in self.bullets:
-            pygame.draw.rect(
-                self.screen,
-                (255, 255, 0),
-                (
-                    *[x * self.tile_size for x in bullet["pos"]],
-                    self.tile_size // 2,
-                    self.tile_size // 2,
-                ),
+            bx, by = bullet["pos"]
+            bullet_pos = (
+                bx * self.tile_size + self.tile_size // 4,
+                by * self.tile_size + self.tile_size // 4,
             )
-        for wall in self.level.walls:
-            rect = pygame.Rect(
-                wall[1] * self.tile_size,
-                wall[0] * self.tile_size,
-                self.tile_size,
-                self.tile_size,
-            )
-            pygame.draw.rect(self.screen, (100, 100, 100), rect)
+            self.screen.blit(self.textures["bullet"], bullet_pos)
 
+        # Draw walls
+        for wall in self.level.walls:
+            wx, wy = wall
+            self.screen.blit(
+                self.textures["wall"], (wx * self.tile_size, wy * self.tile_size)
+            )
+
+        # UI
         font = pygame.font.SysFont(None, 30)
         text = font.render(f"HP: {self.player.health}", True, (255, 255, 255))
         self.screen.blit(text, (10, 10))
 
         pygame.display.flip()
-
-    def save_episode_log(self):
-        filename = f"data/episode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, "w") as f:
-            json.dump(self.episode_log, f)
