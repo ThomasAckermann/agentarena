@@ -5,30 +5,33 @@ from datetime import datetime
 import pygame
 from agent.agent import Agent
 
+from game.level import Level
+from game.player import Player
+
 
 class Game:
     def __init__(
         self,
         screen,
         headless: bool,
-        player_agent: Agent,
-        enemy_agent: Agent,
+        player: Player,
         grid_size: int = 15,
     ) -> None:
         self.screen = screen
         self.headless: bool = headless
-        self.player_agent: Agent = player_agent
-        self.enemy_agent: Agent = enemy_agent
+        self.player: Player = player
         self.grid_size: int = grid_size
         self.walls: set = set()
-        self.episode_log = []
+        self.episode_log: list[dict] = []
+        self.level = Level(self.player)
         self.reset()
 
     def reset(self) -> None:
-        self.level = self.generate_level()
+        self.level.generate_level()
+
         self.player_pos = self.level["player_start"]
         self.player_direction = "UP"
-        self.player_health = 3
+        self.player.health = 3
         self.player_shots = 0
         self.player_cooldown = 0
         self.events: int = []
@@ -40,40 +43,6 @@ class Game:
 
         self.bullets = []
         self.running = True
-
-    def generate_level(self) -> dict:
-        player_start = [
-            random.randint(0, self.grid_size - 1),
-            random.randint(0, self.grid_size - 1),
-        ]
-
-        num_enemies = random.randint(1, 3)
-        enemy_starts = []
-        while len(enemy_starts) < num_enemies:
-            pos = [
-                random.randint(0, self.grid_size - 1),
-                random.randint(0, self.grid_size - 1),
-            ]
-            if pos != player_start and pos not in enemy_starts:
-                enemy_starts.append(pos)
-
-        # Generate walls
-        all_occupied = {tuple(player_start)} | {tuple(e) for e in enemy_starts}
-        num_walls = random.randint(5, 15)
-        walls = set()
-
-        while len(walls) < num_walls:
-            wall = (
-                random.randint(0, self.grid_size - 1),
-                random.randint(0, self.grid_size - 1),
-            )
-            if wall not in all_occupied:
-                walls.add(wall)
-        print(walls)
-
-        self.walls = walls
-
-        return {"player_start": player_start, "enemy_starts": enemy_starts}
 
     def get_observation(self, agent_id: str = "player") -> dict:
         if agent_id == "player":
@@ -212,24 +181,47 @@ class Game:
                     print(f"Player hit! Health: {self.player_health}")
                     self.bullets.remove(bullet)
 
+    def load_textures(self) -> None:
+        self.tile_size = 40
+        self.player_texture = pygame.image.load("assets/player.png").convert_alpha()
+        self.enemy_texture = pygame.image.load("assets/enemy.png").convert_alpha()
+        self.wall_texture = pygame.image.load("assets/wall.png").convert_alpha()
+
+        self.player_texture = pygame.transform.scale(
+            self.player_texture, (self.tile_size, self.tile_size)
+        )
+        self.enemy_texture = pygame.transform.scale(
+            self.enemy_texture, (self.tile_size, self.tile_size)
+        )
+        self.wall_texture = pygame.transform.scale(
+            self.wall_texture, (self.tile_size, self.tile_size)
+        )
+
     def render(self) -> None:
         if self.headless:
             return
 
         self.screen.fill((0, 0, 0))
-        tile_size = 40
-
+        self.load_textures()
         pygame.draw.rect(
             self.screen,
             (0, 255, 0),
-            (*[x * tile_size for x in self.player_pos], tile_size, tile_size),
+            (
+                *[x * self.tile_size for x in self.player_pos],
+                self.tile_size,
+                self.tile_size,
+            ),
         )
 
         for enemy in self.enemies:
             pygame.draw.rect(
                 self.screen,
                 (255, 0, 0),
-                (*[x * tile_size for x in enemy["pos"]], tile_size, tile_size),
+                (
+                    *[x * self.tile_size for x in enemy["pos"]],
+                    self.tile_size,
+                    self.tile_size,
+                ),
             )
 
         for bullet in self.bullets:
@@ -237,14 +229,17 @@ class Game:
                 self.screen,
                 (255, 255, 0),
                 (
-                    *[x * tile_size for x in bullet["pos"]],
-                    tile_size // 2,
-                    tile_size // 2,
+                    *[x * self.tile_size for x in bullet["pos"]],
+                    self.tile_size // 2,
+                    self.tile_size // 2,
                 ),
             )
         for wall in self.walls:
             rect = pygame.Rect(
-                wall[1] * tile_size, wall[0] * tile_size, tile_size, tile_size
+                wall[1] * self.tile_size,
+                wall[0] * self.tile_size,
+                self.tile_size,
+                self.tile_size,
             )
             pygame.draw.rect(self.screen, (100, 100, 100), rect)
 
