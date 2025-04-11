@@ -1,0 +1,29 @@
+# Which agent type to control the player
+# Options: manual, rule_based, ml
+player_agent: manual
+
+# Which agent type to control the enemies
+# Options: manual, rule_based, ml
+enemy_agent: rule_based
+
+# Maximum number of enemies allowed on the screen at the same time
+max_enemies: 3
+
+# Width/Height of a single block or tile in pixels
+block_width: 40
+block_height: 40
+
+# Total width/height of the display window in pixels
+display_width: 600
+display_height: 600
+
+# Frames per second – affects animation smoothness and game speed
+fps: 30
+
+# Whether to run the game without any graphical display (e.g. for training)
+headless: false
+
+# Speed at which bullets travel (pixels per frame)
+bullet_speed: 800
+player_speed: 400
+

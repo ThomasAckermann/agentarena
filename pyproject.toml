@@ -1,0 +1,30 @@
+[project]
+name = "agentarena"
+version = "0.1.0"
+description = "2D shooting game with configurable AI agents and machine learning integration"
+authors = [{ name = "Thomas Ackermann" }]
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+dependencies = [
+    "torch==2.6.0",
+    "torchvision==0.21.0",
+    "pygame>=2.6.1",
+    "pydantic==2.11.3",
+    "pyyaml==6.0.2"
+]
+
+[project.optional-dependencies]
+dev = [
+    "black==25.1.0",
+    "ruff==0.11.4",
+    "pre-commit==4.2.0"
+]
+
+[project.scripts]
+agentarena = "agentarena.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

@@ -1,4 +1,4 @@
-from game.action import Action
+from agentarena.game.action import Action
 
 
 class Agent:

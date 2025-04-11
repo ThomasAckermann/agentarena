@@ -1,8 +1,8 @@
 import random
 
-from game.action import Action, Direction
+from agentarena.game.action import Action, Direction
 
-from agent.agent import Agent
+from agentarena.agent.agent import Agent
 
 
 class RandomAgent(Agent):
