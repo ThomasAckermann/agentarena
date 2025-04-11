@@ -1,4 +1,4 @@
-from agent.agent import Agent
+from agentarena.agent.agent import Agent
 
 
 class MLAgent(Agent):
