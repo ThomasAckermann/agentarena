@@ -1,6 +1,9 @@
 data/
 .DS_Store
 .ruff_cache
+models/
+results/
+uv.lock
 
 
 # Byte-compiled / optimized / DLL files
