@@ -1,9 +1,10 @@
 import random
+
 import pygame
 
-from agentarena.game.entities.wall import Wall
-from agentarena.game.entities.player import Player
 from agentarena.config import GameConfig
+from agentarena.game.entities.player import Player
+from agentarena.game.entities.wall import Wall
 
 
 class Level:
@@ -29,33 +30,29 @@ class Level:
         """Add walls around the border of the screen"""
         # Add debug print to track execution
         print("Adding border walls...")
-        wall_count_horizontal: int = (
-            int(self.config.display_width / self.config.block_width) + 1
-        )
-        wall_count_vertical: int = (
-            int(self.config.display_height / self.config.block_height) + 1
-        )
+        wall_count_horizontal: int = int(self.config.display_width / self.config.block_width) + 1
+        wall_count_vertical: int = int(self.config.display_height / self.config.block_height) + 1
 
         # Top border
-        for x in range(0, wall_count_horizontal):
+        for x in range(wall_count_horizontal):
             self.walls.append(
                 Wall(
                     x=x * self.config.block_width,
                     y=0,
                     width=self.config.block_width,
                     height=self.config.block_height,
-                )
+                ),
             )
 
         # Bottom border
-        for x in range(0, wall_count_horizontal):
+        for x in range(wall_count_horizontal):
             self.walls.append(
                 Wall(
                     x=x * self.config.block_width,
                     y=(self.config.display_height - self.config.block_height),
                     width=self.config.block_width,
                     height=self.config.block_height,
-                )
+                ),
             )
 
         # Left border
@@ -66,7 +63,7 @@ class Level:
                     y=y * self.config.block_height,
                     width=self.config.block_width,
                     height=self.config.block_height,
-                )
+                ),
             )
 
         # Right border
@@ -77,7 +74,7 @@ class Level:
                     y=y * self.config.block_height,
                     width=self.config.block_width,
                     height=self.config.block_height,
-                )
+                ),
             )
 
         print(f"Border walls added: {len(self.walls)}")
@@ -87,9 +84,7 @@ class Level:
         print("Generating wall clusters...")
 
         # Debugging first
-        print(
-            f"Display dimensions: {self.config.display_width}x{self.config.display_height}"
-        )
+        print(f"Display dimensions: {self.config.display_width}x{self.config.display_height}")
         print(f"Block dimensions: {self.config.block_width}x{self.config.block_height}")
 
         # Parameters
@@ -126,9 +121,7 @@ class Level:
             y = grid_y * self.config.block_height
 
             # Create a test rectangle
-            test_rect = pygame.Rect(
-                x, y, self.config.block_width, self.config.block_height
-            )
+            test_rect = pygame.Rect(x, y, self.config.block_width, self.config.block_height)
 
             # Check if it's too close to player or enemies
             for entity in [self.player] + self.enemies:
@@ -188,7 +181,7 @@ class Level:
                 self.walls.extend(new_walls)
                 clusters_created += 1
                 print(
-                    f"Created cluster #{clusters_created} at ({grid_x}, {grid_y}) with {len(new_walls)} walls"
+                    f"Created cluster #{clusters_created} at ({grid_x}, {grid_y}) with {len(new_walls)} walls",
                 )
             else:
                 failed_attempts += 1
@@ -196,7 +189,7 @@ class Level:
                     print(f"Failed {failed_attempts} attempts to place clusters")
 
         print(
-            f"Wall cluster generation complete. Created {clusters_created} clusters after {attempt_count} attempts."
+            f"Wall cluster generation complete. Created {clusters_created} clusters after {attempt_count} attempts.",
         )
 
         # If we couldn't create enough clusters, at least add some random walls
@@ -216,7 +209,7 @@ class Level:
                             y=y,
                             width=self.config.block_width,
                             height=self.config.block_height,
-                        )
+                        ),
                     )
                     random_walls_added += 1
 
@@ -228,7 +221,6 @@ class Level:
     def ensure_playable(self) -> None:
         """Ensure player and enemies are not fully surrounded by walls"""
         print("Ensuring level is playable...")
-
 
         def clear_adjacent_if_needed(entity):
             adjacents = [
@@ -251,7 +243,11 @@ class Level:
             # If all are blocked, remove one wall to create an opening
             if not has_free_space:
                 print(f"Entity at ({entity.x}, {entity.y}) is trapped, clearing a path")
-                for adj, (dx, dy) in zip(adjacents, [(1, 0), (-1, 0), (0, 1), (0, -1)]):
+                for adj, (dx, dy) in zip(
+                    adjacents,
+                    [(1, 0), (-1, 0), (0, 1), (0, -1)],
+                    strict=False,
+                ):
                     for wall in self.walls[:]:  # Use a copy for safe removal
                         if wall.rect.colliderect(adj):
                             self.walls.remove(wall)
@@ -265,4 +261,3 @@ class Level:
             clear_adjacent_if_needed(enemy)
 
         print("Playability check complete")
-

@@ -21,7 +21,12 @@ dependencies = [
 dev = [
     "black==25.1.0",
     "ruff==0.11.4",
-    "pre-commit==4.2.0"
+    "pre-commit==4.2.0",
+    "mypy>=1.8.0",
+    "isort>=5.13.2",
+    "types-pyyaml>=6.0.12.12",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0"
 ]
 
 [project.scripts]
@@ -30,3 +35,42 @@ agentarena = "agentarena.main:main"
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+include = "\\.pyi?$"
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "B", "I", "W", "C90", "N", "UP", "ANN", "FBT", "A", "COM", "C4", "DTZ", "T10", "EM", "FA", "ISC", "ICN", "G", "INP", "PIE", "T20", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
+ignore = ["ANN101", "ANN102", "ANN401"]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/*" = ["ANN", "FBT", "ARG"]
+"verify_install.py" = ["ANN", "FBT", "ARG", "T201", "E501", "T203"]
+"src/agentarena/game/game.py" = ["T201"]  # Allow print statements in game.py
+"src/agentarena/game/level.py" = ["T201"]  # Allow print statements in level.py
+"src/agentarena/training/train.py" = ["T201"]  # Allow print statements in training
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+strict_optional = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false

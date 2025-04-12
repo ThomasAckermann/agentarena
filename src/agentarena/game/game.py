@@ -3,20 +3,19 @@ import random
 from datetime import datetime
 
 import pygame
-from pygame.math import Vector2
 from pygame import Rect
+from pygame.math import Vector2
 
 from agentarena.agent.agent import Agent
+from agentarena.config import GameConfig
 from agentarena.game.action import Action
 from agentarena.game.entities.player import Player
 from agentarena.game.entities.projectile import Projectile
 from agentarena.game.level import Level
-from agentarena.config import GameConfig
 
 ASSET_PATH: str = "src/agentarena/assets"
 LOG_PATH: str = "src/agentarena/data"
 PLAYER_SCALE: float = 0.8
-
 
 
 class Game:
@@ -27,7 +26,6 @@ class Game:
         enemy_agent: Agent,
         clock: pygame.time.Clock,
         config: GameConfig,
-
     ) -> None:
         self.screen: pygame.Surface = screen
         self.player_agent: Agent = player_agent
@@ -60,7 +58,7 @@ class Game:
         self.dt: float = 1 / 60  # Fixed time step for predictable physics
         self.running = True
         self.static_map_data = {
-            "walls": [{"wall_x": wall.x, "wall_y": wall.y} for wall in self.level.walls]
+            "walls": [{"wall_x": wall.x, "wall_y": wall.y} for wall in self.level.walls],
         }
 
     def setup_collision_grid(self):
@@ -102,18 +100,15 @@ class Game:
 
         return nearby_objects
 
-
     def create_player(self):
         player_position = [
             random.randint(
-
                 2 * self.config.block_width,
                 self.config.display_width - 2 * self.config.block_width,
             ),
             random.randint(
                 2 * self.config.block_height,
                 self.config.display_height - 2 * self.config.block_height,
-
             ),
         ]
         player_orientation = [0, 1]
@@ -147,11 +142,10 @@ class Game:
                     y=enemy_position[1],
                     height=self.scaled_height,
                     width=self.scaled_width,
-
                     orientation=enemy_orientation,
                     agent=self.enemy_agent,
                     speed=self.config.player_speed,
-                )
+                ),
             )
 
     def get_observation(self, agent_id: str = "player") -> dict:
@@ -199,7 +193,7 @@ class Game:
                         "y": self.player.y,
                         "orientation": self.player.orientation,
                         "health": self.player.health,
-                    }
+                    },
                 ],
                 "bullets": [
                     {
@@ -253,7 +247,7 @@ class Game:
                 "action": player_action.dict(),
                 "events": self.events.copy(),
                 "done": not self.running,
-            }
+            },
         )
 
         # Render the frame
@@ -297,9 +291,7 @@ class Game:
             dx, dy = action.get_direction_vector()
             player.orientation = [dx, dy]
             old_x, old_y = player.x, player.y
-            movement_vector = Vector2(
-                dx * self.dt * player.speed, dy * self.dt * player.speed
-            )
+            movement_vector = Vector2(dx * self.dt * player.speed, dy * self.dt * player.speed)
 
             # Apply movement
             player.x += movement_vector.x
@@ -318,11 +310,7 @@ class Game:
                 player.x, player.y = old_x, old_y
 
         # Shooting mechanics
-        if (
-            action.is_shooting is True
-            and player.ammunition > 0
-            and player.cooldown == 0
-        ):
+        if action.is_shooting is True and player.ammunition > 0 and player.cooldown == 0:
             dx, dy = player.orientation
 
             # Calculate bullet spawn position (center of player)
@@ -343,7 +331,7 @@ class Game:
                     owner=agent_id,
                     width=self.bullet_width,
                     height=self.bullet_height,
-                )
+                ),
             )
 
             # Update ammunition and cooldown
@@ -405,13 +393,11 @@ class Game:
                             print(f"Enemy {i} defeated")
                             self.enemies.remove(enemy)
                         break
-            else:
-                # Check for player hits
-                if bullet.rect.colliderect(self.player.rect):
-                    self.events.append({"type": "player_hit"})
-                    self.player.health -= 1
-                    print(f"Player hit! Health: {self.player.health}")
-                    bullets_to_remove.add(bullet_idx)
+            elif bullet.rect.colliderect(self.player.rect):
+                self.events.append({"type": "player_hit"})
+                self.player.health -= 1
+                print(f"Player hit! Health: {self.player.health}")
+                bullets_to_remove.add(bullet_idx)
 
         # Remove bullets in reverse order (to avoid index shifting problems)
         for bullet_idx in sorted(bullets_to_remove, reverse=True):
@@ -419,7 +405,6 @@ class Game:
                 self.bullets.pop(bullet_idx)
 
     def save_episode_log(self) -> None:
-
         filename = f"{LOG_PATH}/episode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(filename, "w") as f:
             json.dump(self.episode_log, f)
@@ -448,15 +433,11 @@ class Game:
         # Pre-render health text options
         self.font = pygame.font.SysFont("Arial", 20)
         self.health_texts = {}
-        for health in range(0, 11):  # Assuming max health is 10
-            self.health_texts[health] = self.font.render(
-                f"Health: {health}", True, (255, 255, 255)
-            )
+        for health in range(11):  # Assuming max health is 10
+            self.health_texts[health] = self.font.render(f"Health: {health}", True, (255, 255, 255))
         self.ammo_texts = {}
-        for ammo in range(0, 11):  # Assuming max health is 10
-            self.ammo_texts[ammo] = self.font.render(
-                f"Ammo: {ammo}", True, (255, 255, 255)
-            )
+        for ammo in range(11):  # Assuming max health is 10
+            self.ammo_texts[ammo] = self.font.render(f"Ammo: {ammo}", True, (255, 255, 255))
 
     def render(self):
         # Optimize rendering by doing grouped operations

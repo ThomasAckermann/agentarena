@@ -1,7 +1,7 @@
 import pygame
-from agentarena.game.action import Action, Direction
 
 from agentarena.agent.agent import Agent
+from agentarena.game.action import Action, Direction
 
 
 class ManualAgent(Agent):

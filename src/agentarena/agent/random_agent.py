@@ -1,8 +1,7 @@
 import random
 
-from agentarena.game.action import Action, Direction
-
 from agentarena.agent.agent import Agent
+from agentarena.game.action import Action, Direction
 
 
 class RandomAgent(Agent):
@@ -18,6 +17,6 @@ class RandomAgent(Agent):
                 Direction.TOP_RIGHT,
                 Direction.DOWN_LEFT,
                 Direction.DOWN_RIGHT,
-            ]
+            ],
         )
         return Action(is_shooting=is_shooting, direction=direction)

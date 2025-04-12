@@ -7,7 +7,6 @@ class Agent:
 
     def reset(self) -> None:
         """Called at the start of a stage"""
-        pass
 
     def get_action(self, observation) -> Action:
         """
