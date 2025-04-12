@@ -229,6 +229,7 @@ class Level:
         """Ensure player and enemies are not fully surrounded by walls"""
         print("Ensuring level is playable...")
 
+
         def clear_adjacent_if_needed(entity):
             adjacents = [
                 pygame.Rect(
@@ -264,3 +265,4 @@ class Level:
             clear_adjacent_if_needed(enemy)
 
         print("Playability check complete")
+

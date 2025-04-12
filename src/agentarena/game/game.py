@@ -1,9 +1,11 @@
 import json
 import random
 from datetime import datetime
+
 import pygame
 from pygame.math import Vector2
 from pygame import Rect
+
 from agentarena.agent.agent import Agent
 from agentarena.game.action import Action
 from agentarena.game.entities.player import Player
@@ -16,6 +18,7 @@ LOG_PATH: str = "src/agentarena/data"
 PLAYER_SCALE: float = 0.8
 
 
+
 class Game:
     def __init__(
         self,
@@ -24,6 +27,7 @@ class Game:
         enemy_agent: Agent,
         clock: pygame.time.Clock,
         config: GameConfig,
+
     ) -> None:
         self.screen: pygame.Surface = screen
         self.player_agent: Agent = player_agent
@@ -98,15 +102,18 @@ class Game:
 
         return nearby_objects
 
+
     def create_player(self):
         player_position = [
             random.randint(
+
                 2 * self.config.block_width,
                 self.config.display_width - 2 * self.config.block_width,
             ),
             random.randint(
                 2 * self.config.block_height,
                 self.config.display_height - 2 * self.config.block_height,
+
             ),
         ]
         player_orientation = [0, 1]
@@ -140,6 +147,7 @@ class Game:
                     y=enemy_position[1],
                     height=self.scaled_height,
                     width=self.scaled_width,
+
                     orientation=enemy_orientation,
                     agent=self.enemy_agent,
                     speed=self.config.player_speed,
@@ -288,7 +296,6 @@ class Game:
         if action.direction is not None:
             dx, dy = action.get_direction_vector()
             player.orientation = [dx, dy]
-
             old_x, old_y = player.x, player.y
             movement_vector = Vector2(
                 dx * self.dt * player.speed, dy * self.dt * player.speed
@@ -387,10 +394,12 @@ class Game:
 
             if bullet.owner == "player":
                 # Check for enemy hits
+
                 for i, enemy in enumerate(self.enemies):
                     if bullet.rect.colliderect(enemy.rect):
                         self.events.append({"type": "enemy_hit", "enemy_id": i})
                         enemy.health -= 1
+
                         bullets_to_remove.add(bullet_idx)
                         if enemy.health <= 0:
                             print(f"Enemy {i} defeated")
@@ -410,6 +419,7 @@ class Game:
                 self.bullets.pop(bullet_idx)
 
     def save_episode_log(self) -> None:
+
         filename = f"{LOG_PATH}/episode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(filename, "w") as f:
             json.dump(self.episode_log, f)

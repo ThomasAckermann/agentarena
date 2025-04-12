@@ -10,6 +10,7 @@ from agentarena.config import load_config, GameConfig
 def main():
     pygame.init()
     config: GameConfig = load_config()
+
     screen = pygame.display.set_mode((config.display_width, config.display_height))
 
     clock = pygame.time.Clock()
