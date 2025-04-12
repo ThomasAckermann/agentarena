@@ -3,7 +3,6 @@ Machine learning agent for AgentArena.
 """
 
 import random
-from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import torch
@@ -37,11 +36,16 @@ class ReplayMemory:
             capacity: Maximum number of experiences to store
         """
         self.capacity = capacity
-        self.memory: List[Experience] = []
+        self.memory: list[Experience] = []
         self.position = 0
 
     def push(
-        self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool
+        self,
+        state: np.ndarray,
+        action: int,
+        reward: float,
+        next_state: np.ndarray,
+        done: bool,
     ) -> None:
         """
         Save a transition to the replay buffer.
@@ -55,7 +59,11 @@ class ReplayMemory:
         """
         # Create Experience model
         experience = Experience(
-            state=state, action=action, reward=reward, next_state=next_state, done=done
+            state=state,
+            action=action,
+            reward=reward,
+            next_state=next_state,
+            done=done,
         )
 
         # Add to memory with circular buffer logic
@@ -66,7 +74,7 @@ class ReplayMemory:
 
         self.position = (self.position + 1) % self.capacity
 
-    def sample(self, batch_size: int) -> List[Experience]:
+    def sample(self, batch_size: int) -> list[Experience]:
         """
         Sample a batch of transitions randomly.
 
@@ -131,7 +139,7 @@ class MLAgent(Agent):
         epsilon_min: float = 0.01,
         epsilon_decay: float = 0.995,
         is_training: bool = True,
-        config: Optional[MLAgentConfig] = None,
+        config: MLAgentConfig | None = None,
     ) -> None:
         """
         Initialize the ML agent.
@@ -192,8 +200,8 @@ class MLAgent(Agent):
         self.memory = ReplayMemory(self.memory_capacity)
 
         # Track last state and action for learning
-        self.last_state: Optional[np.ndarray] = None
-        self.last_action: Optional[int] = None
+        self.last_state: np.ndarray | None = None
+        self.last_action: int | None = None
         self.accumulated_reward = 0.0
 
     def _initialize_model(self, state_size: int) -> DQNModel:

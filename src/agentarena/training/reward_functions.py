@@ -3,9 +3,6 @@ Reward functions for reinforcement learning in AgentArena.
 """
 
 from enum import Enum
-from typing import List, Optional, Tuple, cast
-
-import numpy as np
 
 from agentarena.models.events import (
     BulletFiredEvent,
@@ -33,9 +30,9 @@ class RewardType(Enum):
 
 
 def calculate_reward(
-    events: List[GameEvent],
+    events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: Optional[GameObservation] = None,
+    previous_observation: GameObservation | None = None,
     reward_type: RewardType = RewardType.BASIC,
 ) -> float:
     """
@@ -65,9 +62,9 @@ def calculate_reward(
 
 
 def _basic_reward(
-    events: List[GameEvent],
+    events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: Optional[GameObservation] = None,
+    previous_observation: GameObservation | None = None,
 ) -> float:
     """
     Basic reward function focusing on hits and survival.
@@ -98,9 +95,9 @@ def _basic_reward(
 
 
 def _aggressive_reward(
-    events: List[GameEvent],
+    events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: Optional[GameObservation] = None,
+    previous_observation: GameObservation | None = None,
 ) -> float:
     """
     Reward function that encourages aggressive play.
@@ -139,9 +136,9 @@ def _aggressive_reward(
 
 
 def _defensive_reward(
-    events: List[GameEvent],
+    events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: Optional[GameObservation] = None,
+    previous_observation: GameObservation | None = None,
 ) -> float:
     """
     Reward function that encourages defensive play.
@@ -192,9 +189,9 @@ def _defensive_reward(
 
 
 def _advanced_reward(
-    events: List[GameEvent],
+    events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: Optional[GameObservation] = None,
+    previous_observation: GameObservation | None = None,
 ) -> float:
     """
     Advanced reward function with multiple components.

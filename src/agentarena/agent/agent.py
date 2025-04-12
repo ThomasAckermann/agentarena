@@ -2,8 +2,6 @@
 Base agent interface for AgentArena.
 """
 
-from typing import Optional
-
 from agentarena.game.action import Action
 from agentarena.models.observations import GameObservation
 
@@ -27,7 +25,6 @@ class Agent:
 
     def reset(self) -> None:
         """Called at the start of a stage to reset agent state."""
-        pass
 
     def get_action(self, observation: GameObservation) -> Action:
         """
