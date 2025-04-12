@@ -7,7 +7,7 @@ player_agent: manual
 enemy_agent: rule_based
 
 # Maximum number of enemies allowed on the screen at the same time
-max_enemies: 5
+max_enemies: 3
 
 # Width/Height of a single block or tile in pixels
 block_width: 64
