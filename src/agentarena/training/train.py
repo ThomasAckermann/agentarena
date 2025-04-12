@@ -1,98 +1,115 @@
+"""
+Training module for AgentArena ML agents.
+"""
+
 import argparse
-import os
 import pickle
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 import pygame
+import torch
 
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
-from agentarena.config import load_config
-from agentarena.game.game import Game
+from agentarena.models.config import GameConfig, load_config
+from agentarena.models.events import GameEvent
+from agentarena.models.observations import GameObservation
+from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
 
 
 def train(
-    episodes: int = 1000,
-    model_save_freq: int = 100,
-    render: bool = False,
-    checkpoint_path: Path | None = None,
-    reward_type: RewardType = RewardType.ADVANCED,
-) -> MLAgent:
-    """Train the ML agent"""
+    config: TrainingConfig,
+) -> Optional[MLAgent]:
+    """
+    Train the ML agent according to the provided configuration.
+
+    Args:
+        config: Training configuration parameters
+
+    Returns:
+        Trained ML agent or None if training was interrupted
+    """
     print(
-        f"Starting ML agent training with {reward_type.value} reward function...",
+        f"Starting ML agent training with {config.reward_type.value} reward function...",
     )
 
     # Initialize pygame if needed for rendering
-    if render:
+    if config.render:
         pygame.init()
 
-    # Load configuration
-    config = load_config()
+    # Load game configuration
+    game_config = load_config()
 
     # Set to headless mode if not rendering
-    if not render:
-        config.headless = True
+    if not config.render:
+        game_config.headless = True
 
     # Adjust for faster training
-    if not render:
-        config.fps = 0  # Uncapped FPS for headless mode
+    if not config.render:
+        game_config.fps = 0  # Uncapped FPS for headless mode
 
     # Initialize screen if rendering
     screen = None
-    if render:
+    if config.render:
         screen = pygame.display.set_mode(
-            (config.display_width, config.display_height),
+            (game_config.display_width, game_config.display_height),
         )
         pygame.display.set_caption(
-            f"AgentArena ML Training - {reward_type.value}",
+            f"AgentArena ML Training - {config.reward_type.value}",
         )
 
     # Create clock
     clock = pygame.time.Clock()
 
-    # Create agents
-    player_agent = MLAgent(is_training=True)
+    # Create ML agent with config
+    player_agent = MLAgent(
+        is_training=True,
+        config=config.ml_config,
+    )
     enemy_agent = RandomAgent()
 
     # Load checkpoint if provided
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        print(f"Loading model from {checkpoint_path}")
-        player_agent.load_model(checkpoint_path)
+    if config.checkpoint_path and config.checkpoint_path.exists():
+        print(f"Loading model from {config.checkpoint_path}")
+        player_agent.load_model(config.checkpoint_path)
+
+    # Import game here to avoid circular imports
+    from agentarena.game.game import Game
 
     # Create game
-    game = Game(screen, player_agent, enemy_agent, clock, config)
+    game = Game(screen, player_agent, enemy_agent, clock, game_config)
 
     # Prepare model directory
-    models_dir = Path("models")
-    models_dir.mkdir(exist_ok=True)
+    config.models_dir.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Training statistics
-    episode_rewards = []
-    episode_lengths = []
-    epsilons = []  # Track epsilon values for visualization
+    episode_rewards: List[float] = []
+    episode_lengths: List[int] = []
+    epsilons: List[float] = []  # Track epsilon values for visualization
+    episode_details: List[EpisodeResult] = []
     best_reward = float("-inf")
 
-    # File paths for saving results
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
-    results_file = results_dir / f"training_results_{timestamp}_{reward_type.value}.pkl"
-
     try:
-        for episode in range(1, episodes + 1):
+        for episode in range(1, config.episodes + 1):
             # Reset the game
             game.reset()
-            episode_reward = 0
+            episode_reward = 0.0
             step = 0
-            previous_observation = None
+
+            # Track events for this episode
+            episode_events = []
+
+            # Initialize previous observation
+            previous_observation: Optional[GameObservation] = None
 
             # Run the episode
-            while game.running and step < 1000:  # Step limit to prevent infinite episodes
+            while game.running and step < config.max_steps_per_episode:
                 # Handle pygame events if rendering
-                if render:
+                if config.render:
                     for event in pygame.event.get():
                         if event.type == pygame.QUIT:
                             return None
@@ -111,10 +128,13 @@ def train(
                     game.events,
                     next_observation,
                     previous_observation,
-                    reward_type,
+                    config.reward_type,
                 )
 
                 episode_reward += reward
+
+                # Store events for logging
+                episode_events.extend([event.model_dump() for event in game.events])
 
                 # Learn from this step
                 player_agent.learn(next_observation, reward, not game.running)
@@ -123,14 +143,27 @@ def train(
                 previous_observation = current_observation
 
                 # Limit rendering speed if needed
-                if render:
-                    clock.tick(config.fps)
+                if config.render:
+                    clock.tick(game.config.fps)
 
                 step += 1
 
             # Track episode statistics
             episode_rewards.append(episode_reward)
             episode_lengths.append(step)
+
+            # Create episode result for detailed tracking
+            episode_result = EpisodeResult(
+                episode_id=episode,
+                total_reward=episode_reward,
+                episode_length=step,
+                win=len(game.enemies) == 0,  # Win if all enemies defeated
+                player_health_remaining=game.player.health if game.player else 0,
+                enemies_defeated=game.config.max_enemies - len(game.enemies),
+                accuracy=0.0,  # TODO: Calculate accuracy
+                events=episode_events,
+            )
+            episode_details.append(episode_result)
 
             # Calculate moving average
             window_size = min(episode, 100)
@@ -141,35 +174,39 @@ def train(
 
             # Print progress
             print(
-                f"Episode {episode}/{episodes} - Steps: {step} "
-                "- Reward: {episode_reward:.2f} "
-                "- Avg Reward: {avg_reward:.2f} "
-                "- Epsilon: {player_agent.epsilon:.4f}",
+                f"Episode {episode}/{config.episodes} - Steps: {step} "
+                f"- Reward: {episode_reward:.2f} "
+                f"- Avg Reward: {avg_reward:.2f} "
+                f"- Epsilon: {player_agent.epsilon:.4f}"
             )
 
             # Save model periodically
-            if episode % model_save_freq == 0:
-                model_path = models_dir / f"ml_agent_{timestamp}_{reward_type.value}_ep{episode}.pt"
+            if episode % config.save_frequency == 0:
+                model_path = (
+                    config.models_dir
+                    / f"{config.model_name}_{timestamp}_{config.reward_type.value}_ep{episode}.pt"
+                )
                 player_agent.save_model(model_path)
                 print(f"Model saved to {model_path}")
 
                 # Also save training results
-                results = {
-                    "episode_rewards": episode_rewards,
-                    "episode_lengths": episode_lengths,
-                    "epsilons": epsilons,
-                    "reward_type": reward_type.value,
-                    "timestamp": timestamp,
-                    "episodes_completed": episode,
-                }
-                with open(results_file, "wb") as f:
-                    pickle.dump(results, f)
-                print(f"Training results saved to {results_file}")
+                _save_training_results(
+                    config=config,
+                    timestamp=timestamp,
+                    episode_rewards=episode_rewards,
+                    episode_lengths=episode_lengths,
+                    epsilons=epsilons,
+                    episode_details=episode_details,
+                    episodes_completed=episode,
+                )
 
             # Save best model
             if avg_reward > best_reward:
                 best_reward = avg_reward
-                best_model_path = models_dir / f"ml_agent_{timestamp}_{reward_type.value}_best.pt"
+                best_model_path = (
+                    config.models_dir
+                    / f"{config.model_name}_{timestamp}_{config.reward_type.value}_best.pt"
+                )
                 player_agent.save_model(best_model_path)
                 print(f"New best model saved with avg reward: {best_reward:.2f}")
 
@@ -178,27 +215,76 @@ def train(
 
     finally:
         # Save final model
-        final_model_path = models_dir / f"ml_agent_{timestamp}_{reward_type.value}_final.pt"
+        final_model_path = (
+            config.models_dir
+            / f"{config.model_name}_{timestamp}_{config.reward_type.value}_final.pt"
+        )
         player_agent.save_model(final_model_path)
         print(f"Final model saved to {final_model_path}")
 
         # Save final training results
-        results = {
-            "episode_rewards": episode_rewards,
-            "episode_lengths": episode_lengths,
-            "epsilons": epsilons,
-            "reward_type": reward_type.value,
-            "timestamp": timestamp,
-            "episodes_completed": len(episode_rewards),
-        }
-        with open(results_file, "wb") as f:
-            pickle.dump(results, f)
-        print(f"Final training results saved to {results_file}")
+        _save_training_results(
+            config=config,
+            timestamp=timestamp,
+            episode_rewards=episode_rewards,
+            episode_lengths=episode_lengths,
+            epsilons=epsilons,
+            episode_details=episode_details,
+            episodes_completed=len(episode_rewards),
+        )
 
-        if render:
+        if config.render:
             pygame.quit()
 
     return player_agent
+
+
+def _save_training_results(
+    config: TrainingConfig,
+    timestamp: str,
+    episode_rewards: List[float],
+    episode_lengths: List[int],
+    epsilons: List[float],
+    episode_details: List[EpisodeResult],
+    episodes_completed: int,
+) -> None:
+    """
+    Save training results to disk.
+
+    Args:
+        config: Training configuration
+        timestamp: Timestamp string for filename
+        episode_rewards: List of rewards for each episode
+        episode_lengths: List of steps for each episode
+        epsilons: List of epsilon values used
+        episode_details: Detailed episode results
+        episodes_completed: Number of episodes completed
+    """
+    # Create results directory if it doesn't exist
+    config.results_dir.mkdir(exist_ok=True)
+
+    # Create results file path
+    results_file = (
+        config.results_dir / f"{config.model_name}_{timestamp}_{config.reward_type.value}.pkl"
+    )
+
+    # Create training results model
+    results = TrainingResults(
+        episode_rewards=episode_rewards,
+        episode_lengths=episode_lengths,
+        epsilons=epsilons,
+        reward_type=config.reward_type.value,
+        timestamp=timestamp,
+        episodes_completed=episodes_completed,
+        ml_config=config.ml_config.model_dump(),
+        episode_details=episode_details,
+    )
+
+    # Save results to disk
+    with results_file.open("wb") as f:
+        pickle.dump(results.model_dump(), f)
+
+    print(f"Training results saved to {results_file}")
 
 
 def evaluate(
@@ -206,7 +292,14 @@ def evaluate(
     episodes: int = 10,
     render: bool = True,
 ) -> None:
-    """Evaluate a trained ML agent"""
+    """
+    Evaluate a trained ML agent.
+
+    Args:
+        model_path: Path to the model file
+        episodes: Number of episodes to evaluate
+        render: Whether to render the game
+    """
     print(f"Evaluating ML agent from {model_path}...")
 
     # Initialize pygame if needed for rendering
@@ -236,19 +329,29 @@ def evaluate(
     player_agent.load_model(model_path)
     enemy_agent = RandomAgent()
 
+    # Import game here to avoid circular imports
+    from agentarena.game.game import Game
+
     # Create game
     game = Game(screen, player_agent, enemy_agent, clock, config)
 
     # Evaluation statistics
     episode_rewards = []
     episode_lengths = []
+    episode_details = []
 
     try:
         for episode in range(1, episodes + 1):
             # Reset the game
             game.reset()
-            episode_reward = 0
+            episode_reward = 0.0
             step = 0
+
+            # Track events for this episode
+            episode_events = []
+
+            # Previous observation for reward calculation
+            previous_observation = None
 
             # Run the episode
             while game.running and step < 1000:  # Step limit to prevent infinite episodes
@@ -258,12 +361,24 @@ def evaluate(
                         if event.type == pygame.QUIT:
                             return
 
+                # Store current observation for reward calculation
+                current_observation = game.get_observation("player")
+
                 # Game update (get action from agent, apply it, etc.)
                 game.update()
 
+                # Get new observation after update
+                next_observation = game.get_observation("player")
+
                 # Calculate reward from events (for statistics only)
-                reward = calculate_reward(game.events)
+                reward = calculate_reward(game.events, next_observation, previous_observation)
                 episode_reward += reward
+
+                # Store events for logging
+                episode_events.extend([event.model_dump() for event in game.events])
+
+                # Update previous observation for next step
+                previous_observation = current_observation
 
                 # Limit rendering speed if needed
                 if render:
@@ -274,6 +389,19 @@ def evaluate(
             # Track episode statistics
             episode_rewards.append(episode_reward)
             episode_lengths.append(step)
+
+            # Create episode result
+            episode_result = EpisodeResult(
+                episode_id=episode,
+                total_reward=episode_reward,
+                episode_length=step,
+                win=len(game.enemies) == 0,  # Win if all enemies defeated
+                player_health_remaining=game.player.health if game.player else 0,
+                enemies_defeated=config.max_enemies - len(game.enemies),
+                accuracy=0.0,  # TODO: Calculate accuracy
+                events=episode_events,
+            )
+            episode_details.append(episode_result)
 
             # Print progress
             print(f"Episode {episode}/{episodes} - Steps: {step} - Reward: {episode_reward:.2f}")
@@ -286,11 +414,18 @@ def evaluate(
             pygame.quit()
 
     # Print overall statistics
-    avg_reward = sum(episode_rewards) / len(episode_rewards)
-    avg_length = sum(episode_lengths) / len(episode_lengths)
-    print(
-        f"Evaluation complete - Avg Reward: {avg_reward:.2f} - Avg Episode Length: {avg_length:.2f}",
+    avg_reward = sum(episode_rewards) / len(episode_rewards) if episode_rewards else 0.0
+    avg_length = sum(episode_lengths) / len(episode_lengths) if episode_lengths else 0.0
+    win_rate = (
+        sum(1 for ep in episode_details if ep.win) / len(episode_details)
+        if episode_details
+        else 0.0
     )
+
+    print(f"Evaluation complete:")
+    print(f"  - Avg Reward: {avg_reward:.2f}")
+    print(f"  - Avg Episode Length: {avg_length:.2f}")
+    print(f"  - Win Rate: {win_rate:.1%}")
 
 
 if __name__ == "__main__":
@@ -300,6 +435,11 @@ if __name__ == "__main__":
         choices=["train", "evaluate"],
         default="train",
         help="Mode to run in",
+    )
+    parser.add_argument(
+        "--model-name",
+        default="ml_agent",
+        help="Name prefix for the saved model",
     )
     parser.add_argument("--episodes", type=int, default=1000, help="Number of episodes to run")
     parser.add_argument(
@@ -323,6 +463,36 @@ if __name__ == "__main__":
         default=RewardType.ADVANCED.value,
         help="Type of reward function to use during training",
     )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=0.001,
+        help="Learning rate for the neural network",
+    )
+    parser.add_argument(
+        "--gamma",
+        type=float,
+        default=0.99,
+        help="Discount factor for future rewards",
+    )
+    parser.add_argument(
+        "--epsilon",
+        type=float,
+        default=1.0,
+        help="Initial exploration rate",
+    )
+    parser.add_argument(
+        "--epsilon-min",
+        type=float,
+        default=0.01,
+        help="Minimum exploration rate",
+    )
+    parser.add_argument(
+        "--epsilon-decay",
+        type=float,
+        default=0.995,
+        help="Rate at which epsilon decays",
+    )
 
     args = parser.parse_args()
 
@@ -330,14 +500,29 @@ if __name__ == "__main__":
     reward_type = RewardType(args.reward_type)
 
     if args.mode == "train":
-        train(
-            episodes=args.episodes,
-            model_save_freq=args.save_freq,
-            render=args.render,
-            checkpoint_path=args.model_path,
-            reward_type=reward_type,
+        # Create ML agent config
+        ml_config = MLAgentConfig(
+            learning_rate=args.learning_rate,
+            gamma=args.gamma,
+            epsilon=args.epsilon,
+            epsilon_min=args.epsilon_min,
+            epsilon_decay=args.epsilon_decay,
         )
+
+        # Create training config
+        training_config = TrainingConfig(
+            model_name=args.model_name,
+            episodes=args.episodes,
+            render=args.render,
+            checkpoint_path=Path(args.model_path) if args.model_path else None,
+            reward_type=reward_type,
+            save_frequency=args.save_freq,
+            ml_config=ml_config,
+        )
+
+        # Train the agent
+        train(config=training_config)
     else:  # evaluate
         if not args.model_path:
             parser.error("--model-path is required for evaluation mode")
-        evaluate(model_path=args.model_path, episodes=args.episodes, render=args.render)
+        evaluate(model_path=Path(args.model_path), episodes=args.episodes, render=args.render)

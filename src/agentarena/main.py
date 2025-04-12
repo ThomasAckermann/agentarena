@@ -6,11 +6,11 @@ import pygame
 from agentarena.agent.manual_agent import ManualAgent
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
-from agentarena.config import load_config
 from agentarena.game.game import Game
+from agentarena.models.config import load_config
 
 
-def main():
+def main() -> None:
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="AgentArena - A 2D shooting game with configurable AI agents",
@@ -42,7 +42,9 @@ def main():
     config = load_config()
 
     # Create display
-    screen = pygame.display.set_mode((config.display_width, config.display_height))
+    screen = pygame.display.set_mode(
+        (config.display_width, config.display_height),
+    )
     pygame.display.set_caption("AgentArena")
 
     # Create clock

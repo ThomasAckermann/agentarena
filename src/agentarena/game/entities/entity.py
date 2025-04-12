@@ -15,12 +15,14 @@ class Entity:
         self.y = y
 
     @property
-    def rect(self):
+    def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.width, self.height)
 
     @rect.setter
-    def rect(self, value):
+    def rect(self, value: pygame.Rect) -> None:
+        """Set the internal rectangle representation."""
         self._rect = value
 
-    def __str__(self):
-        return self.__dict__
+    def __str__(self) -> str:
+        """Convert entity to string representation."""
+        return str(self.__dict__)

@@ -1,13 +1,31 @@
 """
-Reward functions for reinforcement learning in AgentArena
+Reward functions for reinforcement learning in AgentArena.
 """
 
 from enum import Enum
+from typing import List, Optional, Tuple, cast
 
 import numpy as np
 
+from agentarena.models.events import (
+    BulletFiredEvent,
+    EnemyHitEvent,
+    EntityDestroyedEvent,
+    GameEvent,
+    PlayerHitEvent,
+)
+from agentarena.models.observations import GameObservation
+
+# Constants for reward calculations
+NEARBY_DISTANCE_THRESHOLD = 300.0  # Distance threshold for considering enemies "nearby"
+BULLET_DODGE_DISTANCE = 100.0  # Distance threshold for bullet dodging detection
+
 
 class RewardType(Enum):
+    """
+    Types of reward functions available for training.
+    """
+
     BASIC = "basic"  # Simple rewards for hits and avoiding damage
     AGGRESSIVE = "aggressive"  # Prioritizes dealing damage over safety
     DEFENSIVE = "defensive"  # Prioritizes staying alive over dealing damage
@@ -15,13 +33,13 @@ class RewardType(Enum):
 
 
 def calculate_reward(
-    events: list,
-    observation: dict,
-    previous_observation: dict | None = None,
+    events: List[GameEvent],
+    observation: GameObservation,
+    previous_observation: Optional[GameObservation] = None,
     reward_type: RewardType = RewardType.BASIC,
-) -> float | ValueError:
+) -> float:
     """
-    Calculate rewards based on game events and observations
+    Calculate rewards based on game events and observations.
 
     Args:
         events: List of events that occurred during the step
@@ -40,20 +58,38 @@ def calculate_reward(
         return _defensive_reward(events, observation, previous_observation)
     elif reward_type == RewardType.ADVANCED:
         return _advanced_reward(events, observation, previous_observation)
-    else:
-        raise ValueError(f"Unknown reward type: {reward_type}")
+
+    # Invalid reward type
+    error_msg = f"Unknown reward type: {reward_type}"
+    raise ValueError(error_msg)
 
 
-def _basic_reward(events, observation, previous_observation=None) -> float:
-    """Basic reward function focusing on hits and survival"""
-    reward = 0
+def _basic_reward(
+    events: List[GameEvent],
+    observation: GameObservation,
+    previous_observation: Optional[GameObservation] = None,
+) -> float:
+    """
+    Basic reward function focusing on hits and survival.
+
+    Args:
+        events: Game events from the current step
+        observation: Current game state
+        previous_observation: Previous game state (unused in basic reward)
+
+    Returns:
+        float: The calculated reward
+    """
+    reward = 0.0
 
     # Reward for hitting enemies
     for event in events:
-        if event["type"] == "enemy_hit":
+        if isinstance(event, EnemyHitEvent):
             reward += 1.0
-        elif event["type"] == "player_hit":
+        elif isinstance(event, PlayerHitEvent):
             reward -= 1.0
+        elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
+            reward += 2.0  # Bonus for destroying an enemy
 
     # Small penalty for each step to encourage faster completion
     reward -= 0.01
@@ -61,20 +97,40 @@ def _basic_reward(events, observation, previous_observation=None) -> float:
     return reward
 
 
-def _aggressive_reward(events, observation, previous_observation=None) -> float:
-    """Reward function that encourages aggressive play"""
-    reward = 0
+def _aggressive_reward(
+    events: List[GameEvent],
+    observation: GameObservation,
+    previous_observation: Optional[GameObservation] = None,
+) -> float:
+    """
+    Reward function that encourages aggressive play.
+
+    Args:
+        events: Game events from the current step
+        observation: Current game state
+        previous_observation: Previous game state
+
+    Returns:
+        float: The calculated reward
+    """
+    reward = 0.0
 
     # Large reward for hitting enemies
     for event in events:
-        if event["type"] == "enemy_hit":
+        if isinstance(event, EnemyHitEvent):
             reward += 2.0
-        elif event["type"] == "player_hit":
+        elif isinstance(event, PlayerHitEvent):
             reward -= 0.5  # Smaller penalty for getting hit
+        elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
+            reward += 5.0  # Large bonus for destroying an enemy
+        elif isinstance(event, BulletFiredEvent) and event.owner_id == "player":
+            reward += 0.1  # Small reward for shooting
 
-    # Reward for shooting
-    if _is_shooting(observation, previous_observation):
-        reward += 0.1
+    # Reward for being close to enemies (encouraging engagement)
+    if nearest_enemy := observation.nearest_enemy():
+        enemy, distance = nearest_enemy
+        # More reward for being closer to enemies
+        reward += max(0, (500.0 - distance) / 500.0) * 0.1
 
     # Small penalty for each step to encourage faster completion
     reward -= 0.01
@@ -82,42 +138,90 @@ def _aggressive_reward(events, observation, previous_observation=None) -> float:
     return reward
 
 
-def _defensive_reward(events, observation, previous_observation=None) -> float:
-    """Reward function that encourages defensive play"""
-    reward = 0
+def _defensive_reward(
+    events: List[GameEvent],
+    observation: GameObservation,
+    previous_observation: Optional[GameObservation] = None,
+) -> float:
+    """
+    Reward function that encourages defensive play.
+
+    Args:
+        events: Game events from the current step
+        observation: Current game state
+        previous_observation: Previous game state
+
+    Returns:
+        float: The calculated reward
+    """
+    reward = 0.0
 
     # Moderate reward for hitting enemies
     for event in events:
-        if event["type"] == "enemy_hit":
+        if isinstance(event, EnemyHitEvent):
             reward += 0.5
-        elif event["type"] == "player_hit":
+        elif isinstance(event, PlayerHitEvent):
             reward -= 2.0  # Larger penalty for getting hit
+        elif isinstance(event, EntityDestroyedEvent):
+            if event.is_enemy_destroyed():
+                reward += 1.0  # Bonus for destroying an enemy
+            elif event.is_player_destroyed():
+                reward -= 5.0  # Large penalty for dying
 
     # Reward for staying alive
     reward += 0.02
 
     # Reward for maintaining distance from enemies
-    if previous_observation:
-        prev_distance = _min_enemy_distance(previous_observation)
-        curr_distance = _min_enemy_distance(observation)
+    if (
+        previous_observation
+        and observation.nearest_enemy()
+        and previous_observation.nearest_enemy()
+    ):
+        prev_distance = previous_observation.nearest_enemy()[1]
+        curr_distance = observation.nearest_enemy()[1]
 
         # If there are enemies nearby and the player moved away from them
-        if prev_distance < 300 and curr_distance > prev_distance:
+        if prev_distance < NEARBY_DISTANCE_THRESHOLD and curr_distance > prev_distance:
             reward += 0.05
+
+    # Reward for avoiding bullets
+    if len(observation.bullets_near_player()) == 0:
+        reward += 0.05  # Small reward for having no bullets nearby
 
     return reward
 
 
-def _advanced_reward(events, observation, previous_observation=None) -> float:
-    """Advanced reward function with multiple components"""
-    reward = 0
+def _advanced_reward(
+    events: List[GameEvent],
+    observation: GameObservation,
+    previous_observation: Optional[GameObservation] = None,
+) -> float:
+    """
+    Advanced reward function with multiple components.
+
+    Args:
+        events: Game events from the current step
+        observation: Current game state
+        previous_observation: Previous game state
+
+    Returns:
+        float: The calculated reward
+    """
+    reward = 0.0
 
     # Event-based rewards
     for event in events:
-        if event["type"] == "enemy_hit":
+        if isinstance(event, EnemyHitEvent):
             reward += 1.0
-        elif event["type"] == "player_hit":
+        elif isinstance(event, PlayerHitEvent):
             reward -= 1.0
+        elif isinstance(event, EntityDestroyedEvent):
+            if event.is_enemy_destroyed():
+                reward += 3.0  # Bonus for destroying an enemy
+            elif event.is_player_destroyed():
+                reward -= 5.0  # Large penalty for dying
+        elif isinstance(event, BulletFiredEvent) and event.owner_id == "player":
+            reward += 0.05  # Small reward for shooting
 
     # Small penalty for each step to encourage faster completion
     reward -= 0.01
@@ -125,120 +229,36 @@ def _advanced_reward(events, observation, previous_observation=None) -> float:
     # If we have previous observation, we can calculate more rewards
     if previous_observation:
         # Reward for moving toward enemies when health is high
-        player_health = observation["player"]["health"]
-        if player_health > 1:  # If health is good, encourage attacking
-            prev_distance = _min_enemy_distance(previous_observation)
-            curr_distance = _min_enemy_distance(observation)
+        player_health = observation.player.health
+
+        if (
+            player_health > 1
+            and observation.nearest_enemy()
+            and previous_observation.nearest_enemy()
+        ):
+            # If health is good, encourage attacking
+            prev_distance = previous_observation.nearest_enemy()[1]
+            curr_distance = observation.nearest_enemy()[1]
 
             if prev_distance > curr_distance:
                 reward += 0.05  # Reward for closing in
-        else:
+        elif observation.nearest_enemy() and previous_observation.nearest_enemy():
             # If health is low, encourage defensive play
-            prev_distance = _min_enemy_distance(previous_observation)
-            curr_distance = _min_enemy_distance(observation)
+            prev_distance = previous_observation.nearest_enemy()[1]
+            curr_distance = observation.nearest_enemy()[1]
 
-            if prev_distance < 300 and curr_distance > prev_distance:
+            if prev_distance < NEARBY_DISTANCE_THRESHOLD and curr_distance > prev_distance:
                 reward += 0.1  # Reward for backing away when low health
 
         # Reward for dodging bullets
-        if _is_dodging_bullets(observation, previous_observation):
-            reward += 0.2
+        prev_bullets_near = len(previous_observation.bullets_near_player(BULLET_DODGE_DISTANCE))
+        curr_bullets_near = len(observation.bullets_near_player(BULLET_DODGE_DISTANCE))
+
+        if prev_bullets_near > curr_bullets_near and prev_bullets_near > 0:
+            reward += 0.2  # Reward for having fewer bullets nearby than before
 
     # Penalty for being close to too many bullets
-    bullet_danger = _bullet_danger_level(observation)
+    bullet_danger = len(observation.bullets_near_player())
     reward -= 0.05 * bullet_danger
 
     return reward
-
-
-def _min_enemy_distance(observation) -> float:
-    """Calculate minimum distance to any enemy"""
-    player_x = observation["player"]["x"]
-    player_y = observation["player"]["y"]
-
-    min_distance = float("inf")
-    for enemy in observation["enemies"]:
-        dx = enemy["x"] - player_x
-        dy = enemy["y"] - player_y
-        distance = np.sqrt(dx**2 + dy**2)
-        min_distance = min(min_distance, distance)
-
-    return min_distance if min_distance != float("inf") else 0
-
-
-def _is_shooting(observation, previous_observation) -> bool:
-    """Determine if player fired a shot in this step"""
-    if not previous_observation:
-        return False
-
-    # Count bullets in current and previous observation
-    current_bullets = len(observation["bullets"])
-    previous_bullets = len(previous_observation["bullets"])
-
-    # If we have more bullets now, player likely shot
-    return current_bullets > previous_bullets
-
-
-def _is_dodging_bullets(observation, previous_observation):
-    """Check if player successfully dodged bullets"""
-    if not previous_observation:
-        return False
-
-    player_x = observation["player"]["x"]
-    player_y = observation["player"]["y"]
-
-    # Look for bullets that were close to player in previous observation
-    close_bullets_before = 0
-    for bullet in previous_observation["bullets"]:
-        if bullet["owner"] != "player":  # Only care about enemy bullets
-            dx = bullet["x"] - previous_observation["player"]["x"]
-            dy = bullet["y"] - previous_observation["player"]["y"]
-            distance = np.sqrt(dx**2 + dy**2)
-
-            if distance < 100:  # Bullet was close
-                close_bullets_before += 1
-
-    # Look for the same bullets in current observation
-    # They should now be farther away if dodged successfully
-    dodged_bullets = 0
-    for bullet in observation["bullets"]:
-        if bullet["owner"] != "player":  # Only care about enemy bullets
-            dx = bullet["x"] - player_x
-            dy = bullet["y"] - player_y
-            distance = np.sqrt(dx**2 + dy**2)
-
-            if distance > 100:  # Bullet is now farther away
-                dodged_bullets += 1
-
-    # If we had close bullets before and now they're farther, we dodged
-    return close_bullets_before > 0 and dodged_bullets >= close_bullets_before
-
-
-def _bullet_danger_level(observation):
-    """Calculate how dangerous the current bullet situation is"""
-    player_x = observation["player"]["x"]
-    player_y = observation["player"]["y"]
-
-    danger_level = 0
-    for bullet in observation["bullets"]:
-        if bullet["owner"] != "player":  # Only care about enemy bullets
-            dx = bullet["x"] - player_x
-            dy = bullet["y"] - player_y
-            distance = np.sqrt(dx**2 + dy**2)
-
-            # Calculate if bullet is heading toward player
-            bullet_dir_x, bullet_dir_y = bullet["direction"]
-
-            # Normalize direction to player
-            dir_to_player_x = -dx / (distance + 1e-6)  # Avoid division by zero
-            dir_to_player_y = -dy / (distance + 1e-6)
-
-            # Dot product to see if directions align (bullet heading toward player)
-            dot_product = bullet_dir_x * dir_to_player_x + bullet_dir_y * dir_to_player_y
-
-            # Higher danger for closer bullets moving toward player
-            if dot_product > 0:  # Bullet is moving toward player
-                danger = (1.0 / (distance + 1)) * dot_product
-                danger_level += danger
-
-    return danger_level
