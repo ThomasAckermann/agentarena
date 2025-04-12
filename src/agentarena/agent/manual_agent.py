@@ -1,13 +1,45 @@
+"""
+Manual agent controlled by the player's keyboard input.
+"""
+
 import pygame
 
 from agentarena.agent.agent import Agent
 from agentarena.game.action import Action, Direction
+from agentarena.models.observations import GameObservation
 
 
 class ManualAgent(Agent):
-    def get_action(self, observation):
+    """
+    Human-controlled agent that processes keyboard input.
+
+    This agent translates keyboard presses into game actions.
+    """
+
+    def __init__(self, name: str = "Human") -> None:
+        """
+        Initialize the manual agent.
+
+        Args:
+            name: Agent name for display and logging
+        """
+        super().__init__(name)
+
+    def get_action(self, observation: GameObservation) -> Action:
+        """
+        Convert keyboard input to game actions.
+
+        Args:
+            observation: Current game state (unused in manual agent)
+
+        Returns:
+            Action: The player's action based on keyboard input
+        """
         keys = pygame.key.get_pressed()
         is_shooting = False
+        direction = None
+
+        # Determine direction based on key combinations
         if keys[pygame.K_UP] and keys[pygame.K_RIGHT]:
             direction = Direction.TOP_RIGHT
         elif keys[pygame.K_UP] and keys[pygame.K_LEFT]:
@@ -24,8 +56,9 @@ class ManualAgent(Agent):
             direction = Direction.LEFT
         elif keys[pygame.K_RIGHT]:
             direction = Direction.RIGHT
-        else:
-            direction = None
+
+        # Check if shooting
         if keys[pygame.K_SPACE]:
             is_shooting = True
+
         return Action(is_shooting=is_shooting, direction=direction)
