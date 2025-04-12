@@ -28,4 +28,3 @@ headless: false
 # Speed at which bullets travel (pixels per frame)
 bullet_speed: 1200
 player_speed: 600
-

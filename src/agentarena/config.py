@@ -1,7 +1,8 @@
-from pydantic import BaseModel
-from typing import Literal
-import yaml
 from pathlib import Path
+from typing import Literal
+
+import yaml
+from pydantic import BaseModel
 
 
 class GameConfig(BaseModel):
