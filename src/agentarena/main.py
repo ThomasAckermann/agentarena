@@ -4,12 +4,13 @@ import pygame
 from agentarena.agent.manual_agent import ManualAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.game.game import Game
-from agentarena.config import load_config
+from agentarena.config import load_config, GameConfig
 
 
 def main():
     pygame.init()
-    config = load_config()
+    config: GameConfig = load_config()
+
     screen = pygame.display.set_mode((config.display_width, config.display_height))
 
     clock = pygame.time.Clock()

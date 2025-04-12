@@ -21,3 +21,7 @@ class Entity:
     @rect.setter
     def rect(self, value):
         self._rect = value
+
+    def __str__(self):
+        return self.__dict__
+

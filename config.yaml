@@ -10,12 +10,14 @@ enemy_agent: rule_based
 max_enemies: 3
 
 # Width/Height of a single block or tile in pixels
-block_width: 40
-block_height: 40
+
+block_width: 64
+block_height: 64
 
 # Total width/height of the display window in pixels
-display_width: 600
-display_height: 600
+display_width: 1200
+display_height: 900
+
 
 # Frames per second – affects animation smoothness and game speed
 fps: 30
@@ -24,6 +26,6 @@ fps: 30
 headless: false
 
 # Speed at which bullets travel (pixels per frame)
-bullet_speed: 800
-player_speed: 400
+bullet_speed: 1200
+player_speed: 600
 
