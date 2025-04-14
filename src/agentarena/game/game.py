@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pygame
 from pygame.math import Vector2
-from agentarena.game.action import Direction, DIRECTION_VECTORS
+
 from agentarena.agent.agent import Agent
-from agentarena.game.action import Action
+from agentarena.game.action import DIRECTION_VECTORS, Action, Direction
+from agentarena.game.entities.explosion import Explosion
 from agentarena.game.entities.player import Player
 from agentarena.game.entities.projectile import Projectile
 from agentarena.game.level import Level
@@ -22,8 +23,6 @@ from agentarena.models.events import (
     GameEvent,
     PlayerHitEvent,
 )
-from agentarena.game.entities.explosion import Explosion
-
 from agentarena.models.observations import (
     BulletObservation,
     EnemyObservation,
@@ -563,7 +562,10 @@ class Game:
             # Create bullet using the object pool if available
             if hasattr(self, "get_bullet_from_pool"):
                 bullet = self.get_bullet_from_pool(
-                    x=int(center_x), y=int(center_y), direction=[dx, dy], owner=agent_id
+                    x=int(center_x),
+                    y=int(center_y),
+                    direction=[dx, dy],
+                    owner=agent_id,
                 )
             else:
                 # Fallback to direct creation if object pooling isn't implemented
@@ -586,7 +588,7 @@ class Game:
                     owner_id=agent_id,
                     direction=(dx, dy),
                     position=(center_x, center_y),
-                )
+                ),
             )
 
             # Update ammunition and cooldown
@@ -675,7 +677,7 @@ class Game:
                                 enemy_id=enemy_idx,
                                 damage=1,
                                 position=(bullet.x, bullet.y),
-                            )
+                            ),
                         )
 
                         # Create explosion at bullet impact position
@@ -702,7 +704,7 @@ class Game:
                                         enemy.x if enemy.x is not None else 0,
                                         enemy.y if enemy.y is not None else 0,
                                     ),
-                                )
+                                ),
                             )
 
                             # Create a larger explosion at enemy position when destroyed
@@ -725,7 +727,7 @@ class Game:
                         damage=1,
                         bullet_owner=bullet.owner,
                         position=(bullet.x, bullet.y),
-                    )
+                    ),
                 )
 
                 # Create explosion at bullet impact position
@@ -757,7 +759,7 @@ class Game:
                                 entity1_id=f"bullet_{bullet.owner}",
                                 entity2_id="wall",
                                 position=(bullet.x, bullet.y),
-                            )
+                            ),
                         )
                         # Create small explosion for wall impact
                         # Determine which type of explosion to use based on bullet owner
@@ -1049,10 +1051,10 @@ class Game:
                 explosion.explosion_type in self.textures["explosion"]
                 and len(self.textures["explosion"][explosion.explosion_type]) > 0
             ):
-
                 # Get the correct explosion texture for this frame with bounds checking
                 frame_index = min(
-                    explosion.frame, len(self.textures["explosion"][explosion.explosion_type]) - 1
+                    explosion.frame,
+                    len(self.textures["explosion"][explosion.explosion_type]) - 1,
                 )
                 explosion_texture = self.textures["explosion"][explosion.explosion_type][
                     frame_index
@@ -1062,7 +1064,8 @@ class Game:
                 if explosion.width < self.scaled_width:
                     # Create a smaller version of the texture for bullet impacts
                     explosion_texture = pygame.transform.scale(
-                        explosion_texture, (explosion.width, explosion.height)
+                        explosion_texture,
+                        (explosion.width, explosion.height),
                     )
 
                 # Render the explosion (only if we successfully got a texture)
