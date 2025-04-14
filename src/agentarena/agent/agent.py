@@ -2,7 +2,7 @@
 Base agent interface for AgentArena.
 """
 
-from agentarena.game.action import Action
+from agentarena.models.action import Action
 from agentarena.models.observations import GameObservation
 
 
