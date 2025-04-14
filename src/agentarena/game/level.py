@@ -42,7 +42,7 @@ class Level:
         """
         self.player = player
         self.enemies = enemies
-        self.walls: List[Wall] = []
+        self.walls: list[Wall] = []
         self.config: GameConfig = config
         self.wall_models: list[WallModel] = []
 
