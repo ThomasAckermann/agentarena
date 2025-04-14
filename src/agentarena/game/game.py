@@ -13,7 +13,7 @@ from agentarena.game.entities.player import Player
 from agentarena.game.entities.projectile import Projectile
 from agentarena.game.level import Level
 from agentarena.models.config import GameConfig
-from agentarena.models.entities import PlayerModel, ProjectileModel, WallModel
+from agentarena.models.entities import PlayerModel, WallModel
 from agentarena.models.events import (
     BulletFiredEvent,
     CollisionEvent,
@@ -22,6 +22,8 @@ from agentarena.models.events import (
     GameEvent,
     PlayerHitEvent,
 )
+from agentarena.game.entities.explosion import Explosion
+
 from agentarena.models.observations import (
     BulletObservation,
     EnemyObservation,
@@ -47,13 +49,14 @@ class Game:
         self.player_agent: Agent = player_agent
         self.enemy_agent: Agent = enemy_agent
         self.clock = clock
-        self.episode_log: List[Dict] = []
-        self.player: Optional[Player] = None
-        self.enemies: List[Player] = []
+        self.episode_log: list[dict] = []
+        self.player: Player | None = None
+        self.enemies: list[Player] = []
         self.config = config
         self.textures: dict[str, pygame.Surface] = {}
         self.game_time: float = 0.0
         self.score: int = 0
+        self.explosions: list[Explosion] = []
 
         # Precomputed values
         self.bullet_width = int(self.config.block_width / 2)
@@ -80,6 +83,7 @@ class Game:
         self.setup_collision_grid()  # Initialize spatial partitioning
         self.events: list[GameEvent] = []
         self.bullets: list[Projectile] = []
+        self.explosions = []
         self.dt: float = 1 / 60  # Fixed time step for predictable physics
         self.running = True
         self.game_time = 0.0
@@ -372,6 +376,39 @@ class Game:
                 score=self.score,
             )
 
+    def create_explosion(self, x: float, y: float, explosion_type: str) -> None:
+        """Create a new explosion at the specified position.
+
+        Args:
+            x: X position for the explosion
+            y: Y position for the explosion
+            explosion_type: Type of explosion ("player" or "enemy")
+        """
+        # Center the explosion on the entity
+        center_x = x - (self.scaled_width / 2)
+        center_y = y - (self.scaled_height / 2)
+
+        explosion = Explosion(
+            x=center_x,
+            y=center_y,
+            explosion_type=explosion_type,
+            width=self.scaled_width,
+            height=self.scaled_height,
+        )
+        self.explosions.append(explosion)
+
+    def update_explosions(self) -> None:
+        """Update all active explosions and remove finished ones."""
+        i = 0
+        while i < len(self.explosions):
+            explosion = self.explosions[i]
+            explosion.update()
+
+            if explosion.finished:
+                self.explosions.pop(i)
+            else:
+                i += 1
+
     def update(self) -> None:
         """Update game state for the current frame."""
         # Update game time using delta time
@@ -427,6 +464,7 @@ class Game:
 
         # Check for collisions efficiently
         self.check_collisions()
+        self.update_explosions()
 
         # Log game state - convert events to dictionaries for logging
         event_dicts = [event.model_dump() for event in self.events]
@@ -615,58 +653,70 @@ class Game:
     def check_collisions(self) -> None:
         """Check for collisions between bullets and entities."""
         # More efficient collision detection using spatial partitioning
-        bullets_to_remove = set()
+        i = 0
+        while i < len(self.bullets):
+            bullet = self.bullets[i]
 
-        # Process player bullets
-        for bullet_idx, bullet in enumerate(self.bullets):
-            if bullet_idx in bullets_to_remove or bullet.x is None or bullet.y is None:
+            # Skip bullets without position
+            if bullet.x is None or bullet.y is None:
+                i += 1
                 continue
+
+            collision_detected = False
 
             if bullet.owner == "player":
                 # Check for enemy hits
-                for i, enemy in enumerate(self.enemies):
+                for enemy_idx, enemy in enumerate(self.enemies[:]):  # Use a copy for safe iteration
                     if enemy.rect.colliderect(bullet.rect):
                         # Create enemy hit event
                         self.events.append(
                             EnemyHitEvent(
                                 timestamp=self.game_time,
-                                enemy_id=i,
+                                enemy_id=enemy_idx,
                                 damage=1,
                                 position=(bullet.x, bullet.y),
-                            ),
+                            )
                         )
+
+                        # Create explosion at bullet impact position
+                        self.create_explosion(bullet.x, bullet.y, "enemy")
 
                         # Update score
                         self.score += 10
 
                         # Reduce enemy health
                         enemy.health -= 1
-
-                        bullets_to_remove.add(bullet_idx)
+                        collision_detected = True
 
                         # Check if enemy was destroyed
                         if enemy.health <= 0:
-                            print(f"Enemy {i} defeated")
+                            print(f"Enemy {enemy_idx} defeated")
 
                             # Create destroyed event
                             self.events.append(
                                 EntityDestroyedEvent(
                                     timestamp=self.game_time,
-                                    entity_id=f"enemy_{i}",
+                                    entity_id=f"enemy_{enemy_idx}",
                                     entity_type="enemy",
                                     position=(
                                         enemy.x if enemy.x is not None else 0,
                                         enemy.y if enemy.y is not None else 0,
                                     ),
-                                ),
+                                )
                             )
+
+                            # Create a larger explosion at enemy position when destroyed
+                            if enemy.x is not None and enemy.y is not None:
+                                self.create_explosion(enemy.x, enemy.y, "enemy")
 
                             # Update score for enemy defeat
                             self.score += 50
 
                             # Remove the enemy
                             self.enemies.remove(enemy)
+
                         break
+
             elif self.player is not None and bullet.rect.colliderect(self.player.rect):
                 # Player was hit by enemy bullet
                 self.events.append(
@@ -675,17 +725,56 @@ class Game:
                         damage=1,
                         bullet_owner=bullet.owner,
                         position=(bullet.x, bullet.y),
-                    ),
+                    )
                 )
+
+                # Create explosion at bullet impact position
+                self.create_explosion(bullet.x, bullet.y, "player")
 
                 self.player.health -= 1
                 print(f"Player hit! Health: {self.player.health}")
-                bullets_to_remove.add(bullet_idx)
 
-        # Remove bullets in reverse order (to avoid index shifting problems)
-        for bullet_idx in sorted(bullets_to_remove, reverse=True):
-            if bullet_idx < len(self.bullets):  # Safety check
-                self.bullets.pop(bullet_idx)
+                # Check if player was destroyed
+                if (
+                    self.player.health <= 0
+                    and self.player.x is not None
+                    and self.player.y is not None
+                ):
+                    # Create a larger explosion at player position when destroyed
+                    self.create_explosion(self.player.x, self.player.y, "player")
+
+                collision_detected = True
+
+            # Also check for wall collisions to create explosions
+            if not collision_detected:
+                nearby_walls = self.get_objects_near(bullet, ["wall"])
+                for wall_obj, _ in nearby_walls:
+                    if bullet.rect.colliderect(wall_obj.rect):
+                        # Create collision event
+                        self.events.append(
+                            CollisionEvent(
+                                timestamp=self.game_time,
+                                entity1_id=f"bullet_{bullet.owner}",
+                                entity2_id="wall",
+                                position=(bullet.x, bullet.y),
+                            )
+                        )
+                        # Create small explosion for wall impact
+                        # Determine which type of explosion to use based on bullet owner
+                        explosion_type = "player" if bullet.owner == "player" else "enemy"
+                        self.create_explosion(bullet.x, bullet.y, explosion_type)
+
+                        collision_detected = True
+                        break
+
+            # Remove bullet if collision detected or move to next bullet
+            if collision_detected:
+                if hasattr(self, "return_bullet_to_pool"):
+                    self.return_bullet_to_pool(self.bullets.pop(i))
+                else:
+                    self.bullets.pop(i)
+            else:
+                i += 1
 
     def sanitize_for_json(self, data):
         """Recursively remove pygame.Rect and other non-serializable objects from data structure."""
@@ -848,11 +937,51 @@ class Game:
                     (self.bullet_width, self.bullet_height),
                 ),
             },
+            # Load wall and floor textures
             "wall": pygame.transform.scale(
                 pygame.image.load(f"{ASSET_PATH}/wall.png"),
                 (self.config.block_width, self.config.block_height),
             ),
             "floor": pygame.image.load(f"{ASSET_PATH}/floor.png"),
+            # Load explosion textures
+            "explosion": {
+                "player": [
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/player/player_explosion_1.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/player/player_explosion_2.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/player/player_explosion_3.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/player/player_explosion_4.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                ],
+                "enemy": [
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/enemy/enemy_explosion_1.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/enemy/enemy_explosion_2.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/enemy/enemy_explosion_3.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                    pygame.transform.scale(
+                        pygame.image.load(f"{ASSET_PATH}/enemy/enemy_explosion_4.png"),
+                        (self.scaled_width, self.scaled_height),
+                    ),
+                ],
+            },
         }
 
         # Create a repeating floor pattern
@@ -877,7 +1006,6 @@ class Game:
             return
         # Draw the floor background
         self.screen.blit(self.floor_background, (0, 0))
-
 
         # Batch rendering by type
         # Walls
@@ -914,6 +1042,31 @@ class Game:
                 bullet_texture = self.textures["bullet"][bullet_owner]
 
                 self.screen.blit(bullet_texture, bullet.rect)
+
+        for explosion in self.explosions:
+            # Make sure we have textures for this explosion type
+            if (
+                explosion.explosion_type in self.textures["explosion"]
+                and len(self.textures["explosion"][explosion.explosion_type]) > 0
+            ):
+
+                # Get the correct explosion texture for this frame with bounds checking
+                frame_index = min(
+                    explosion.frame, len(self.textures["explosion"][explosion.explosion_type]) - 1
+                )
+                explosion_texture = self.textures["explosion"][explosion.explosion_type][
+                    frame_index
+                ]
+
+                # Scale the texture if the explosion is a smaller impact explosion
+                if explosion.width < self.scaled_width:
+                    # Create a smaller version of the texture for bullet impacts
+                    explosion_texture = pygame.transform.scale(
+                        explosion_texture, (explosion.width, explosion.height)
+                    )
+
+                # Render the explosion (only if we successfully got a texture)
+                self.screen.blit(explosion_texture, explosion.rect)
 
         # UI elements with semi-transparent background
         ui_background = pygame.Surface((200, 100))
