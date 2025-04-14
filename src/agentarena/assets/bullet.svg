@@ -1,0 +1,138 @@
+<svg viewBox="0 0 128 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Definitions for effects -->
+  <defs>
+    <!-- Glow effect -->
+    <filter id="bulletGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    
+    <!-- Energy trail gradient -->
+    <linearGradient id="trailGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#3366ff" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#3366ff" stop-opacity="0" />
+    </linearGradient>
+    
+    <!-- Energy core gradient -->
+    <radialGradient id="coreGradient" cx="50%" cy="50%" r="50%" fx="60%" fy="40%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="70%" stop-color="#66ccff" />
+      <stop offset="100%" stop-color="#3366ff" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Standard bullet (small) -->
+  <g transform="translate(16, 16)">
+    <!-- Energy trail -->
+    <path d="M0,0 L-12,0 C-14,-2 -14,2 -12,0 Z" fill="url(#trailGradient)" opacity="0.7" />
+    
+    <!-- Main bullet -->
+    <circle cx="0" cy="0" r="4" fill="#3366ff" filter="url(#bulletGlow)" />
+    <circle cx="0" cy="0" r="3" fill="url(#coreGradient)" />
+    
+    <!-- Highlight -->
+    <circle cx="-1" cy="-1" r="1" fill="#ffffff" opacity="0.8" />
+  </g>
+  
+  <!-- Medium bullet -->
+  <g transform="translate(48, 16)">
+    <!-- Energy trail -->
+    <path d="M0,0 L-16,0 C-20,-3 -20,3 -16,0 Z" fill="url(#trailGradient)" opacity="0.7" />
+    
+    <!-- Main bullet -->
+    <circle cx="0" cy="0" r="6" fill="#3366ff" filter="url(#bulletGlow)" />
+    <circle cx="0" cy="0" r="5" fill="url(#coreGradient)" />
+    
+    <!-- Highlight -->
+    <circle cx="-2" cy="-2" r="1.5" fill="#ffffff" opacity="0.8" />
+    
+    <!-- Energy rings -->
+    <circle cx="0" cy="0" r="8" fill="none" stroke="#3366ff" stroke-width="1" opacity="0.5" />
+  </g>
+  
+  <!-- Large bullet (powered up) -->
+  <g transform="translate(80, 16)">
+    <!-- Energy trail -->
+    <path d="M0,0 L-20,0 C-24,-4 -24,4 -20,0 Z" fill="url(#trailGradient)" opacity="0.7" />
+    
+    <!-- Main bullet -->
+    <circle cx="0" cy="0" r="8" fill="#3366ff" filter="url(#bulletGlow)" />
+    <circle cx="0" cy="0" r="7" fill="url(#coreGradient)" />
+    
+    <!-- Highlight -->
+    <circle cx="-2.5" cy="-2.5" r="2" fill="#ffffff" opacity="0.8" />
+    
+    <!-- Energy rings -->
+    <circle cx="0" cy="0" r="10" fill="none" stroke="#3366ff" stroke-width="1" opacity="0.5" />
+    <circle cx="0" cy="0" r="12" fill="none" stroke="#3366ff" stroke-width="1" opacity="0.3" />
+  </g>
+  
+  <!-- Special bullet (spread/rapid fire) -->
+  <g transform="translate(112, 16)">
+    <!-- Energy trails -->
+    <path d="M0,0 L-12,-4 C-14,-6 -14,-2 -12,-4 Z" fill="url(#trailGradient)" opacity="0.5" />
+    <path d="M0,0 L-12,0 C-14,-2 -14,2 -12,0 Z" fill="url(#trailGradient)" opacity="0.7" />
+    <path d="M0,0 L-12,4 C-14,6 -14,2 -12,4 Z" fill="url(#trailGradient)" opacity="0.5" />
+    
+    <!-- Main bullet (teardrop shape) -->
+    <path d="M0,0 C4,0 4,4 0,4 C-4,4 -4,-4 0,-4 C4,-4 4,0 0,0 Z" fill="#3366ff" filter="url(#bulletGlow)" />
+    <path d="M0,0 C3,0 3,3 0,3 C-3,3 -3,-3 0,-3 C3,-3 3,0 0,0 Z" fill="url(#coreGradient)" />
+    
+    <!-- Highlight -->
+    <circle cx="-1" cy="-1" r="1" fill="#ffffff" opacity="0.8" />
+  </g>
+  
+  <!-- Second row: Explosion animation frames -->
+  <g transform="translate(16, 48)">
+    <!-- Explosion frame 1 -->
+    <circle cx="0" cy="0" r="6" fill="#3366ff" opacity="0.7" />
+    <circle cx="0" cy="0" r="4" fill="#66ccff" opacity="0.9" />
+    <circle cx="0" cy="0" r="2" fill="#ffffff" />
+  </g>
+  
+  <g transform="translate(48, 48)">
+    <!-- Explosion frame 2 -->
+    <circle cx="0" cy="0" r="8" fill="#3366ff" opacity="0.5" />
+    <circle cx="0" cy="0" r="5" fill="#66ccff" opacity="0.7" />
+    <circle cx="0" cy="0" r="2" fill="#ffffff" opacity="0.9" />
+    <g opacity="0.8">
+      <line x1="0" y1="-6" x2="0" y2="-9" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="6" y1="0" x2="9" y2="0" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="0" y1="6" x2="0" y2="9" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="-6" y1="0" x2="-9" y2="0" stroke="#ffffff" stroke-width="1.5" />
+    </g>
+  </g>
+  
+  <g transform="translate(80, 48)">
+    <!-- Explosion frame 3 -->
+    <circle cx="0" cy="0" r="10" fill="#3366ff" opacity="0.3" />
+    <circle cx="0" cy="0" r="6" fill="#66ccff" opacity="0.5" />
+    <circle cx="0" cy="0" r="2" fill="#ffffff" opacity="0.7" />
+    <g opacity="0.6">
+      <line x1="0" y1="-7" x2="0" y2="-11" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="7" y1="0" x2="11" y2="0" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="0" y1="7" x2="0" y2="11" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="-7" y1="0" x2="-11" y2="0" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="5" y1="-5" x2="8" y2="-8" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="5" y1="5" x2="8" y2="8" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="-5" y1="5" x2="-8" y2="8" stroke="#ffffff" stroke-width="1.5" />
+      <line x1="-5" y1="-5" x2="-8" y2="-8" stroke="#ffffff" stroke-width="1.5" />
+    </g>
+  </g>
+  
+  <g transform="translate(112, 48)">
+    <!-- Explosion frame 4 (final) -->
+    <circle cx="0" cy="0" r="12" fill="#3366ff" opacity="0.1" />
+    <circle cx="0" cy="0" r="7" fill="#66ccff" opacity="0.2" />
+    <g opacity="0.3">
+      <line x1="0" y1="-8" x2="0" y2="-13" stroke="#ffffff" stroke-width="1" />
+      <line x1="8" y1="0" x2="13" y2="0" stroke="#ffffff" stroke-width="1" />
+      <line x1="0" y1="8" x2="0" y2="13" stroke="#ffffff" stroke-width="1" />
+      <line x1="-8" y1="0" x2="-13" y2="0" stroke="#ffffff" stroke-width="1" />
+      <line x1="6" y1="-6" x2="9" y2="-9" stroke="#ffffff" stroke-width="1" />
+      <line x1="6" y1="6" x2="9" y2="9" stroke="#ffffff" stroke-width="1" />
+      <line x1="-6" y1="6" x2="-9" y2="9" stroke="#ffffff" stroke-width="1" />
+      <line x1="-6" y1="-6" x2="-9" y2="-9" stroke="#ffffff" stroke-width="1" />
+    </g>
+  </g>
+</svg>

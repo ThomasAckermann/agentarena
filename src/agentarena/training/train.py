@@ -13,8 +13,7 @@ import torch
 
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
-from agentarena.models.config import GameConfig, load_config
-from agentarena.models.events import GameEvent
+from agentarena.models.config import load_config
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
@@ -22,7 +21,7 @@ from agentarena.training.reward_functions import RewardType, calculate_reward
 
 def train(
     config: TrainingConfig,
-) -> Optional[MLAgent]:
+) -> MLAgent | None:
     """
     Train the ML agent according to the provided configuration.
 
@@ -87,10 +86,10 @@ def train(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Training statistics
-    episode_rewards: List[float] = []
-    episode_lengths: List[int] = []
-    epsilons: List[float] = []  # Track epsilon values for visualization
-    episode_details: List[EpisodeResult] = []
+    episode_rewards: list[float] = []
+    episode_lengths: list[int] = []
+    epsilons: list[float] = []  # Track epsilon values for visualization
+    episode_details: list[EpisodeResult] = []
     best_reward = float("-inf")
 
     try:
@@ -104,7 +103,7 @@ def train(
             episode_events = []
 
             # Initialize previous observation
-            previous_observation: Optional[GameObservation] = None
+            previous_observation: GameObservation | None = None
 
             # Run the episode
             while game.running and step < config.max_steps_per_episode:
@@ -177,7 +176,7 @@ def train(
                 f"Episode {episode}/{config.episodes} - Steps: {step} "
                 f"- Reward: {episode_reward:.2f} "
                 f"- Avg Reward: {avg_reward:.2f} "
-                f"- Epsilon: {player_agent.epsilon:.4f}"
+                f"- Epsilon: {player_agent.epsilon:.4f}",
             )
 
             # Save model periodically
@@ -242,10 +241,10 @@ def train(
 def _save_training_results(
     config: TrainingConfig,
     timestamp: str,
-    episode_rewards: List[float],
-    episode_lengths: List[int],
-    epsilons: List[float],
-    episode_details: List[EpisodeResult],
+    episode_rewards: list[float],
+    episode_lengths: list[int],
+    epsilons: list[float],
+    episode_details: list[EpisodeResult],
     episodes_completed: int,
 ) -> None:
     """
@@ -422,7 +421,7 @@ def evaluate(
         else 0.0
     )
 
-    print(f"Evaluation complete:")
+    print("Evaluation complete:")
     print(f"  - Avg Reward: {avg_reward:.2f}")
     print(f"  - Avg Episode Length: {avg_length:.2f}")
     print(f"  - Win Rate: {win_rate:.1%}")

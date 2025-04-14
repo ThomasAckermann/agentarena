@@ -4,7 +4,6 @@ Level generation and management for AgentArena.
 
 import random
 from pathlib import Path
-from typing import List, Optional, Tuple, cast
 
 import pygame
 
@@ -16,8 +15,8 @@ from agentarena.models.entities import WallModel
 # Constants for level generation
 BUFFER_BLOCKS = 2  # Blocks of space around entities
 MARGIN_BLOCKS = 2  # Margin from edge of screen for random walls
-MIN_CLUSTERS = 5  # Minimum number of wall clusters
-MAX_CLUSTERS = 10  # Maximum number of wall clusters
+MIN_CLUSTERS = 10  # Minimum number of wall clusters
+MAX_CLUSTERS = 15  # Maximum number of wall clusters
 MIN_RANDOM_WALLS = 5  # Minimum random walls to add if not enough clusters
 MAX_RANDOM_WALLS = 15  # Maximum random walls to add if not enough clusters
 
@@ -29,8 +28,8 @@ class Level:
 
     def __init__(
         self,
-        player: Optional[Player],
-        enemies: List[Player],
+        player: Player | None,
+        enemies: list[Player],
         config: GameConfig,
     ) -> None:
         """
@@ -45,7 +44,7 @@ class Level:
         self.enemies = enemies
         self.walls: List[Wall] = []
         self.config: GameConfig = config
-        self.wall_models: List[WallModel] = []
+        self.wall_models: list[WallModel] = []
 
         # Precompute grid dimensions for level generation
         self.grid_width = self.config.display_width // self.config.block_width
@@ -75,7 +74,9 @@ class Level:
 
         # Bottom border
         self._add_wall_row(
-            0, self.config.display_height - self.config.block_height, wall_count_horizontal
+            0,
+            self.config.display_height - self.config.block_height,
+            wall_count_horizontal,
         )
 
         # Left border
@@ -83,7 +84,9 @@ class Level:
 
         # Right border
         self._add_wall_column(
-            self.config.display_width - self.config.block_width, 1, wall_count_vertical - 1
+            self.config.display_width - self.config.block_width,
+            1,
+            wall_count_vertical - 1,
         )
 
         print(f"Border walls added: {len(self.walls)}")
@@ -183,7 +186,7 @@ class Level:
         if clusters_created < MIN_CLUSTERS:
             self._add_random_walls()
 
-    def _get_wall_patterns(self) -> List[List[Tuple[int, int]]]:
+    def _get_wall_patterns(self) -> list[list[tuple[int, int]]]:
         """
         Get list of wall patterns for cluster generation.
 
@@ -316,7 +319,10 @@ class Level:
             # Try directions in order (prefer clearing in a specific direction)
             for adj_x, adj_y, _, _ in adjacents:
                 adj_rect = pygame.Rect(
-                    adj_x, adj_y, self.config.block_width, self.config.block_height
+                    adj_x,
+                    adj_y,
+                    self.config.block_width,
+                    self.config.block_height,
                 )
 
                 for wall in self.walls[:]:  # Use a copy for safe removal

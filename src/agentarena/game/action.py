@@ -24,7 +24,7 @@ class Direction(str, Enum):
 
 
 # Mapping from direction enums to 2D vector components
-DIRECTION_VECTORS: Dict[Direction, Tuple[int, int]] = {
+DIRECTION_VECTORS: dict[Direction, tuple[int, int]] = {
     Direction.UP: (0, -1),
     Direction.DOWN: (0, 1),
     Direction.LEFT: (-1, 0),
@@ -59,10 +59,21 @@ class Action(BaseModel):
             return (0, 0)
         return DIRECTION_VECTORS[self.direction]
 
-    def get_direction_vector(self) -> Tuple[int, int]:
+    @computed_field
+    def direction_vector(self) -> tuple[int, int]:
         """
         Get the 2D vector representation of the direction.
 
+        Returns:
+            Tuple[int, int]: (dx, dy) direction vector components
+        """
+        if self.direction is None:
+            return (0, 0)
+        return DIRECTION_VECTORS[self.direction]
+
+    def get_direction_vector(self) -> tuple[int, int]:
+        """
+        Get the 2D vector representation of the direction.
         Returns:
             Tuple[int, int]: (dx, dy) direction vector components
         """

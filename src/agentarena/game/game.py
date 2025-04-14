@@ -3,23 +3,17 @@ import random
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, cast
 
 import pygame
 from pygame.math import Vector2
-
+from agentarena.game.action import Direction, DIRECTION_VECTORS
 from agentarena.agent.agent import Agent
-from agentarena.game.action import Action, Direction
+from agentarena.game.action import Action
 from agentarena.game.entities.player import Player
 from agentarena.game.entities.projectile import Projectile
 from agentarena.game.level import Level
 from agentarena.models.config import GameConfig
-from agentarena.models.entities import (
-    EntityModel,
-    PlayerModel,
-    ProjectileModel,
-    WallModel,
-)
+from agentarena.models.entities import PlayerModel, ProjectileModel, WallModel
 from agentarena.models.events import (
     BulletFiredEvent,
     CollisionEvent,
@@ -57,7 +51,7 @@ class Game:
         self.player: Optional[Player] = None
         self.enemies: List[Player] = []
         self.config = config
-        self.textures: Dict[str, pygame.Surface] = {}
+        self.textures: dict[str, pygame.Surface] = {}
         self.game_time: float = 0.0
         self.score: int = 0
 
@@ -69,7 +63,7 @@ class Game:
 
         # Spatial partitioning grid for collision detection
         self.grid_size = 100  # Size of each grid cell
-        self.collision_grid: Dict[Tuple[int, int], List[Tuple[Union[Player, Projectile], str]]] = {}
+        self.collision_grid: dict[tuple[int, int], list[tuple[Player | Projectile, str]]] = {}
 
         # Unique game ID for this session
         self.game_id = str(uuid.uuid4())
@@ -84,8 +78,8 @@ class Game:
         self.level: Level = Level(self.player, self.enemies, self.config)
         self.level.generate_level()
         self.setup_collision_grid()  # Initialize spatial partitioning
-        self.events: List[GameEvent] = []
-        self.bullets: List[Projectile] = []
+        self.events: list[GameEvent] = []
+        self.bullets: list[Projectile] = []
         self.dt: float = 1 / 60  # Fixed time step for predictable physics
         self.running = True
         self.game_time = 0.0
@@ -108,12 +102,35 @@ class Game:
 
     def setup_collision_grid(self) -> None:
         """Initialize spatial partitioning grid for collision detection."""
+        # Create a fresh collision grid
         self.collision_grid = {}
-        # Add walls to the grid
+
+        # Add walls to the grid (these are static and only need to be added once)
         for wall in self.level.walls:
             self.add_to_collision_grid(wall, "wall")
 
-    def add_to_collision_grid(self, obj: Union[Player, Projectile], obj_type: str) -> None:
+        # Store the static grid separately so we don't need to rebuild it every frame
+        self.static_collision_grid = self.collision_grid.copy()
+
+    def update_entity_positions(self) -> None:
+        """Update the grid with current positions of dynamic entities only."""
+        # Start with a copy of the static grid (walls) instead of rebuilding
+        self.collision_grid = self.static_collision_grid.copy()
+
+        # Only add dynamic entities to the grid
+        # Add player to the grid
+        if self.player is not None:
+            self.add_to_collision_grid(self.player, "player")
+
+        # Add enemies to the grid
+        for i, enemy in enumerate(self.enemies):
+            self.add_to_collision_grid(enemy, f"enemy_{i}")
+
+        # Add bullets to the grid
+        for bullet in self.bullets:
+            self.add_to_collision_grid(bullet, f"bullet_{bullet.owner}")
+
+    def add_to_collision_grid(self, obj: Player | Projectile, obj_type: str) -> None:
         """Add an object to the spatial partitioning grid."""
         if obj.x is None or obj.y is None:
             return  # Skip objects without position
@@ -131,8 +148,10 @@ class Game:
                 self.collision_grid[grid_key].append((obj, obj_type))
 
     def get_objects_near(
-        self, obj: Union[Player, Projectile], obj_types: Optional[List[str]] = None
-    ) -> List[Tuple[Union[Player, Projectile], str]]:
+        self,
+        obj: Player | Projectile,
+        obj_types: list[str] | None = None,
+    ) -> list[tuple[Player | Projectile, str]]:
         """Get objects near the specified object based on grid location."""
         if obj.x is None or obj.y is None:
             return []  # Return empty list for objects without position
@@ -321,7 +340,7 @@ class Game:
                                     else [0, 0]
                                 ),
                                 health=self.player.health if self.player is not None else 0,
-                            )
+                            ),
                         ]
                         if self.player is not None
                         else []
@@ -380,7 +399,7 @@ class Game:
                         self.player.x if self.player.x is not None else 0,
                         self.player.y if self.player.y is not None else 0,
                     ),
-                )
+                ),
             )
 
             self.save_episode_log()
@@ -433,25 +452,6 @@ class Game:
         if self.screen is not None:
             self.render()
 
-    def update_entity_positions(self) -> None:
-        """Update the grid with current positions of dynamic entities."""
-        # Rebuild the dynamic part of the grid each frame
-        # (Static objects like walls stay in place)
-        self.collision_grid = {}
-        self.setup_collision_grid()  # Re-add walls
-
-        # Add player to the grid
-        if self.player is not None:
-            self.add_to_collision_grid(self.player, "player")
-
-        # Add enemies to the grid
-        for i, enemy in enumerate(self.enemies):
-            self.add_to_collision_grid(enemy, f"enemy_{i}")
-
-        # Add bullets to the grid
-        for bullet in self.bullets:
-            self.add_to_collision_grid(bullet, f"bullet_{bullet.owner}")
-
     def apply_action(
         self,
         agent_id: str,
@@ -475,8 +475,12 @@ class Game:
 
         # Movement processing with vector math
         if action.direction is not None:
+            # Set the player orientation based on the direction
             dx, dy = action.get_direction_vector()
-            player.orientation = [dx, dy]
+            player.orientation = [
+                dx,
+                dy,
+            ]  # This will be used for determining which sprite to render
 
             # Skip movement if player has no position
             if player.x is None or player.y is None:
@@ -518,28 +522,22 @@ class Game:
             center_x += dx * offset
             center_y += dy * offset
 
-            # Create bullet data model
-            bullet_model = ProjectileModel(
-                id=f"bullet_{agent_id}_{self.game_time:.3f}",
-                x=int(center_x),
-                y=int(center_y),
-                width=self.bullet_width,
-                height=self.bullet_height,
-                direction=[dx, dy],
-                owner=agent_id,
-                speed=self.config.bullet_speed,
-            )
-
-            # Create new bullet entity
-            bullet = Projectile(
-                x=int(center_x),
-                y=int(center_y),
-                width=self.bullet_width,
-                height=self.bullet_height,
-                direction=[dx, dy],
-                owner=agent_id,
-                speed=self.config.bullet_speed,
-            )
+            # Create bullet using the object pool if available
+            if hasattr(self, "get_bullet_from_pool"):
+                bullet = self.get_bullet_from_pool(
+                    x=int(center_x), y=int(center_y), direction=[dx, dy], owner=agent_id
+                )
+            else:
+                # Fallback to direct creation if object pooling isn't implemented
+                bullet = Projectile(
+                    x=int(center_x),
+                    y=int(center_y),
+                    width=self.bullet_width,
+                    height=self.bullet_height,
+                    direction=[dx, dy],
+                    owner=agent_id,
+                    speed=self.config.bullet_speed,
+                )
 
             self.bullets.append(bullet)
 
@@ -564,20 +562,31 @@ class Game:
     def move_bullets(self) -> None:
         """Update positions of all bullets and handle wall collisions."""
         # Create screen boundary rectangle
-        screen_rect = pygame.Rect(0, 0, self.config.display_width, self.config.display_height)
+        screen_rect = pygame.Rect(
+            0,
+            0,
+            self.config.display_width,
+            self.config.display_height,
+        )
 
         new_bullets = []
         for bullet in self.bullets:
             # Skip bullets without position
             if bullet.x is None or bullet.y is None:
                 continue
-
+            # Get direction vector (keep as float for precision)
             dx, dy = bullet.direction
-            bullet.x += self.dt * dx * self.config.bullet_speed
-            bullet.y += self.dt * dy * self.config.bullet_speed
 
-            # Skip bullets that are off-screen
-            if not screen_rect.collidepoint(bullet.x, bullet.y):
+            # Calculate new position with floating point precision
+            new_x = bullet.x + self.dt * dx * self.config.bullet_speed
+            new_y = bullet.y + self.dt * dy * self.config.bullet_speed
+
+            # Update bullet position (still as floating point)
+            bullet.x = new_x
+            bullet.y = new_y
+
+            # Skip bullets that are off-screen (use integer rect for this check)
+            if not screen_rect.collidepoint(int(bullet.x), int(bullet.y)):
                 continue
 
             # Check for wall collisions efficiently
@@ -587,23 +596,14 @@ class Game:
             for wall_obj, _ in nearby_walls:
                 if bullet.rect.colliderect(wall_obj.rect):
                     collision_detected = True
-
                     # Create collision event
-                    if isinstance(wall_obj, pygame.Rect):
-                        wall_position = (wall_obj.x, wall_obj.y)
-                    else:
-                        wall_position = (
-                            wall_obj.x if wall_obj.x is not None else 0,
-                            wall_obj.y if wall_obj.y is not None else 0,
-                        )
-
                     self.events.append(
                         CollisionEvent(
                             timestamp=self.game_time,
                             entity1_id=f"bullet_{bullet.owner}",
                             entity2_id="wall",
                             position=(bullet.x, bullet.y),
-                        )
+                        ),
                     )
                     break
 
@@ -633,7 +633,7 @@ class Game:
                                 enemy_id=i,
                                 damage=1,
                                 position=(bullet.x, bullet.y),
-                            )
+                            ),
                         )
 
                         # Update score
@@ -658,7 +658,7 @@ class Game:
                                         enemy.x if enemy.x is not None else 0,
                                         enemy.y if enemy.y is not None else 0,
                                     ),
-                                )
+                                ),
                             )
 
                             # Update score for enemy defeat
@@ -675,7 +675,7 @@ class Game:
                         damage=1,
                         bullet_owner=bullet.owner,
                         position=(bullet.x, bullet.y),
-                    )
+                    ),
                 )
 
                 self.player.health -= 1
@@ -687,16 +687,68 @@ class Game:
             if bullet_idx < len(self.bullets):  # Safety check
                 self.bullets.pop(bullet_idx)
 
+    def sanitize_for_json(self, data):
+        """Recursively remove pygame.Rect and other non-serializable objects from data structure."""
+        if isinstance(data, dict):
+            return {
+                k: self.sanitize_for_json(v)
+                for k, v in data.items()
+                if not isinstance(v, pygame.Rect)
+            }
+        elif isinstance(data, list):
+            return [
+                self.sanitize_for_json(item) for item in data if not isinstance(item, pygame.Rect)
+            ]
+        elif isinstance(data, pygame.Rect):
+            # Skip Rect objects entirely
+            return None
+        else:
+            return data
+
     def save_episode_log(self) -> None:
-        """Save the episode log to a JSON file."""
+        """Save the episode log to a JSON file, filtering out non-serializable objects."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_path = Path(LOG_PATH)
         log_path.mkdir(exist_ok=True, parents=True)
 
         filename = log_path / f"episode_{timestamp}.json"
 
+        # Create a sanitized copy of the episode log
+        sanitized_log = self.sanitize_for_json(self.episode_log)
+
         with filename.open("w") as f:
-            json.dump(self.episode_log, f)
+            json.dump(sanitized_log, f)
+
+    def create_floor_background(self) -> None:
+        """Create a repeating floor pattern surface."""
+        # Get floor tile dimensions
+        floor_tile = self.textures["floor"]
+        tile_width, tile_height = floor_tile.get_size()  # Typically 128x128
+
+        # Create a surface for the entire background
+        background_width = self.config.display_width
+        background_height = self.config.display_height
+
+        # Create a new surface for the background
+        self.floor_background = pygame.Surface((background_width, background_height))
+
+        # Fill the background with repeating floor tiles
+        for y in range(0, background_height, tile_height):
+            for x in range(0, background_width, tile_width):
+                self.floor_background.blit(floor_tile, (x, y))
+
+    def get_direction_from_vector(self, direction_vector) -> Direction:
+        """Convert direction vector to Direction enum value."""
+        if direction_vector is None or (direction_vector[0] == 0 and direction_vector[1] == 0):
+            return None
+
+        # Convert the direction vector to a Direction enum by finding the closest match
+        for direction, vector in DIRECTION_VECTORS.items():
+            if vector[0] == direction_vector[0] and vector[1] == direction_vector[1]:
+                return direction
+
+        # Default to DOWN if no match found (shouldn't happen with normalized vectors)
+        return Direction.DOWN
 
     def load_textures(self) -> None:
         """Load textures for rendering."""
@@ -705,23 +757,106 @@ class Game:
 
         # Load textures once and cache them
         self.textures = {
-            "player": pygame.transform.scale(
-                pygame.image.load(f"{ASSET_PATH}/player.png"),
-                (self.scaled_width, self.scaled_height),
-            ),
-            "enemy": pygame.transform.scale(
-                pygame.image.load(f"{ASSET_PATH}/enemy.png"),
-                (self.scaled_width, self.scaled_height),
-            ),
-            "bullet": pygame.transform.scale(
-                pygame.image.load(f"{ASSET_PATH}/bullet.png"),
-                (self.bullet_width, self.bullet_height),
-            ),
+            # Load directional player sprites
+            "player": {
+                Direction.UP: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_top.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.DOWN: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_bottom.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.LEFT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_left.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.RIGHT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_right.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.TOP_LEFT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_top_left.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.TOP_RIGHT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_top_right.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.DOWN_LEFT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_bottom_left.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.DOWN_RIGHT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_bottom_right.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                # Default sprite if no direction (use DOWN as default)
+                None: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_bottom.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+            },
+            # Load directional enemy sprites
+            "enemy": {
+                Direction.UP: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_top.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.DOWN: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_bottom.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.LEFT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_left.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.RIGHT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_right.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.TOP_LEFT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_top_left.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.TOP_RIGHT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_top_right.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.DOWN_LEFT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_bottom_left.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                Direction.DOWN_RIGHT: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_bottom_right.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+                # Default sprite if no direction (use DOWN as default)
+                None: pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_bottom.png"),
+                    (self.scaled_width, self.scaled_height),
+                ),
+            },
+            # Load different bullet sprites for player and enemy
+            "bullet": {
+                "player": pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/player/player_bullet.png"),
+                    (self.bullet_width, self.bullet_height),
+                ),
+                "enemy": pygame.transform.scale(
+                    pygame.image.load(f"{ASSET_PATH}/enemy/enemy_bullet.png"),
+                    (self.bullet_width, self.bullet_height),
+                ),
+            },
             "wall": pygame.transform.scale(
                 pygame.image.load(f"{ASSET_PATH}/wall.png"),
                 (self.config.block_width, self.config.block_height),
             ),
+            "floor": pygame.image.load(f"{ASSET_PATH}/floor.png"),
         }
+
+        # Create a repeating floor pattern
+        self.create_floor_background()
 
         # Pre-render health text options
         self.font = pygame.font.SysFont("Arial", 20)
@@ -729,7 +864,7 @@ class Game:
         for health in range(11):  # Assuming max health is 10
             self.health_texts[health] = self.font.render(f"Health: {health}", True, (255, 255, 255))
         self.ammo_texts = {}
-        for ammo in range(11):  # Assuming max health is 10
+        for ammo in range(11):
             self.ammo_texts[ammo] = self.font.render(f"Ammo: {ammo}", True, (255, 255, 255))
 
         # Pre-render score text
@@ -740,29 +875,52 @@ class Game:
         # Skip rendering if screen is None (headless mode)
         if self.screen is None:
             return
+        # Draw the floor background
+        self.screen.blit(self.floor_background, (0, 0))
 
-        # Optimize rendering by doing grouped operations
-        self.screen.fill((0, 0, 0))  # Clear screen
 
         # Batch rendering by type
-        # 1. Walls
+        # Walls
         for wall in self.level.walls:
             self.screen.blit(self.textures["wall"], wall.rect)
 
-        # 2. Enemies
+        # Enemies with directional sprites
         for enemy in self.enemies:
-            self.screen.blit(self.textures["enemy"], enemy.rect)
+            # Get the current enemy direction
+            enemy_direction = None
+            if enemy.orientation:
+                enemy_direction = self.get_direction_from_vector(enemy.orientation)
 
-        # 3. Player
+            # Use the appropriate directional texture
+            enemy_texture = self.textures["enemy"][enemy_direction]
+            self.screen.blit(enemy_texture, enemy.rect)
+
+        # Player with directional sprite
         if self.player is not None:
-            self.screen.blit(self.textures["player"], self.player.rect)
+            # Get the current player direction
+            player_direction = None
+            if self.player.orientation:
+                player_direction = self.get_direction_from_vector(self.player.orientation)
 
-        # 4. Bullets
+            # Use the appropriate directional texture
+            player_texture = self.textures["player"][player_direction]
+            self.screen.blit(player_texture, self.player.rect)
+
+        # Bullets with different sprites based on owner
         for bullet in self.bullets:
             if bullet.x is not None and bullet.y is not None:
-                self.screen.blit(self.textures["bullet"], bullet.rect)
+                # Determine the bullet type (player or enemy)
+                bullet_owner = "player" if bullet.owner == "player" else "enemy"
+                bullet_texture = self.textures["bullet"][bullet_owner]
 
-        # 5. UI elements - use pre-rendered text
+                self.screen.blit(bullet_texture, bullet.rect)
+
+        # UI elements with semi-transparent background
+        ui_background = pygame.Surface((200, 100))
+        ui_background.set_alpha(128)  # Semi-transparent
+        ui_background.fill((0, 0, 0))  # Black background
+        self.screen.blit(ui_background, (5, 5))
+
         if self.player is not None:
             self.screen.blit(self.health_texts[self.player.health], (10, 10))
             self.screen.blit(self.ammo_texts[self.player.ammunition], (10, 30))
