@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch import nn, optim
 
 from agentarena.agent.agent import Agent
-from agentarena.game.action import Action, Direction
+from agentarena.models.action import Action, Direction
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import Experience, MLAgentConfig
 

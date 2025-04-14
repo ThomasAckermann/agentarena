@@ -5,7 +5,7 @@ Manual agent controlled by the player's keyboard input.
 import pygame
 
 from agentarena.agent.agent import Agent
-from agentarena.game.action import Action, Direction
+from agentarena.models.action import Action, Direction
 from agentarena.models.observations import GameObservation
 
 

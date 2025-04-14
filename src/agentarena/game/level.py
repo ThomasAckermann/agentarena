@@ -50,6 +50,9 @@ class Level:
         self.grid_width = self.config.display_width // self.config.block_width
         self.grid_height = self.config.display_height // self.config.block_height
 
+        # Generate the level
+        self.generate_level()
+
     def generate_level(self) -> None:
         """Generate a complete level with walls and obstacles."""
         print("Generating level...")
