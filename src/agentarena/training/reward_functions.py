@@ -3,6 +3,20 @@ Reward functions for reinforcement learning in AgentArena.
 """
 
 from enum import Enum
+from typing import List, Optional, Tuple, cast
+
+from agentarena.models.events import (
+    BulletFiredEvent,
+    EnemyHitEvent,
+    EntityDestroyedEvent,
+    GameEvent,
+    PlayerHitEvent,
+)
+from agentarena.models.observations import GameObservation
+
+# Constants for reward calculations
+NEARBY_DISTANCE_THRESHOLD = 300.0  # Distance threshold for considering enemies "nearby"
+BULLET_DODGE_DISTANCE = 100.0  # Distance threshold for bullet dodging detection
 
 from agentarena.models.events import (
     BulletFiredEvent,

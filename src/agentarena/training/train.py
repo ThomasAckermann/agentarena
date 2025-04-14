@@ -6,8 +6,10 @@ import argparse
 import pickle
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 import pygame
+import torch
 
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent

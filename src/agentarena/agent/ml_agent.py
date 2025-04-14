@@ -71,7 +71,6 @@ class ReplayMemory:
             self.memory.append(experience)
         else:
             self.memory[self.position] = experience
-
         self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size: int) -> list[Experience]:
@@ -80,6 +79,7 @@ class ReplayMemory:
 
         Args:
             batch_size: Number of samples to return
+
 
         Returns:
             List of Experience objects

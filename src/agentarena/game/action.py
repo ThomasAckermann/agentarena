@@ -3,6 +3,7 @@ Action definitions and utilities for AgentArena.
 """
 
 from enum import Enum
+from typing import Dict, Optional, Tuple, Union
 
 from pydantic import BaseModel, computed_field
 
@@ -44,7 +45,19 @@ class Action(BaseModel):
     """
 
     is_shooting: bool = False
-    direction: Direction | None = None
+    direction: Optional[Direction] = None
+
+    @computed_field
+    def direction_vector(self) -> Tuple[int, int]:
+        """
+        Get the 2D vector representation of the direction.
+
+        Returns:
+            Tuple[int, int]: (dx, dy) direction vector components
+        """
+        if self.direction is None:
+            return (0, 0)
+        return DIRECTION_VECTORS[self.direction]
 
     @computed_field
     def direction_vector(self) -> tuple[int, int]:
@@ -61,7 +74,6 @@ class Action(BaseModel):
     def get_direction_vector(self) -> tuple[int, int]:
         """
         Get the 2D vector representation of the direction.
-
         Returns:
             Tuple[int, int]: (dx, dy) direction vector components
         """

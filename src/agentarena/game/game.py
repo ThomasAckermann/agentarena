@@ -47,9 +47,9 @@ class Game:
         self.player_agent: Agent = player_agent
         self.enemy_agent: Agent = enemy_agent
         self.clock = clock
-        self.episode_log: list[dict] = []
-        self.player: Player | None = None
-        self.enemies: list[Player] = []
+        self.episode_log: List[Dict] = []
+        self.player: Optional[Player] = None
+        self.enemies: List[Player] = []
         self.config = config
         self.textures: dict[str, pygame.Surface] = {}
         self.game_time: float = 0.0
@@ -574,7 +574,6 @@ class Game:
             # Skip bullets without position
             if bullet.x is None or bullet.y is None:
                 continue
-
             # Get direction vector (keep as float for precision)
             dx, dy = bullet.direction
 
@@ -597,7 +596,6 @@ class Game:
             for wall_obj, _ in nearby_walls:
                 if bullet.rect.colliderect(wall_obj.rect):
                     collision_detected = True
-
                     # Create collision event
                     self.events.append(
                         CollisionEvent(
@@ -877,9 +875,9 @@ class Game:
         # Skip rendering if screen is None (headless mode)
         if self.screen is None:
             return
-
         # Draw the floor background
         self.screen.blit(self.floor_background, (0, 0))
+
 
         # Batch rendering by type
         # Walls
