@@ -6,10 +6,12 @@ import argparse
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 import pygame
 import torch
+
+# Add this import for TensorBoard
+from torch.utils.tensorboard import SummaryWriter
 
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
@@ -17,6 +19,7 @@ from agentarena.models.config import load_config
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
+from agentarena.models.events import PlayerHitEvent
 
 
 def train(
@@ -85,6 +88,15 @@ def train(
     config.models_dir.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    # Setup TensorBoard writer
+    tensorboard_dir = Path("runs")
+    tensorboard_dir.mkdir(exist_ok=True)
+    tensorboard_run_dir = (
+        tensorboard_dir / f"{config.model_name}_{timestamp}_{config.reward_type.value}"
+    )
+    writer = SummaryWriter(tensorboard_run_dir)
+    print(f"TensorBoard logs will be saved to {tensorboard_run_dir}")
+
     # Training statistics
     episode_rewards: list[float] = []
     episode_lengths: list[int] = []
@@ -129,6 +141,12 @@ def train(
                     previous_observation,
                     config.reward_type,
                 )
+                player_hits = 0
+
+                # Inside the episode loop where you process events
+                for event in game.events:
+                    if isinstance(event, PlayerHitEvent):
+                        player_hits += 1
 
                 episode_reward += reward
 
@@ -170,6 +188,27 @@ def train(
 
             # Track epsilon for visualization
             epsilons.append(player_agent.epsilon)
+
+            # Log metrics to TensorBoard
+            writer.add_scalar("Reward/episode", episode_reward, episode)
+            writer.add_scalar("Reward/average", avg_reward, episode)
+            writer.add_scalar("Length/episode", step, episode)
+            writer.add_scalar("Exploration/epsilon", player_agent.epsilon, episode)
+            writer.add_scalar("Metrics/PlayerHits", player_hits, episode)
+
+            # Log win rate
+            win_rate = sum(1 for ep in episode_details[-window_size:] if ep.win) / window_size
+            writer.add_scalar("Performance/win_rate", win_rate, episode)
+
+            # Log histogram of Q-values if available
+            if hasattr(player_agent, "model") and step > 0:
+                # Sample a batch of states for visualization
+                if len(player_agent.memory) > 32:
+                    sample = player_agent.memory.sample(32)
+                    states = torch.FloatTensor([exp.state for exp in sample])
+                    with torch.no_grad():
+                        q_values = player_agent.model(states)
+                        writer.add_histogram("Q-values", q_values.flatten(), episode)
 
             # Print progress
             print(
@@ -232,6 +271,10 @@ def train(
             episodes_completed=len(episode_rewards),
         )
 
+        # Close TensorBoard writer
+        writer.close()
+        print("TensorBoard writer closed")
+
         if config.render:
             pygame.quit()
 
@@ -267,6 +310,9 @@ def _save_training_results(
         config.results_dir / f"{config.model_name}_{timestamp}_{config.reward_type.value}.pkl"
     )
 
+    # Get ML config as a dict - this ensures all fields are properly serialized
+    ml_config_dict = config.ml_config.model_dump()
+
     # Create training results model
     results = TrainingResults(
         episode_rewards=episode_rewards,
@@ -275,7 +321,7 @@ def _save_training_results(
         reward_type=config.reward_type.value,
         timestamp=timestamp,
         episodes_completed=episodes_completed,
-        ml_config=config.ml_config.model_dump(),
+        ml_config=ml_config_dict,
         episode_details=episode_details,
     )
 

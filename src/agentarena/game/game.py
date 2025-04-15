@@ -91,15 +91,24 @@ class Game:
         self.explosions = []
         self.episode_log = []
 
+        # Reset the agents
+        self.player_agent.reset()
+        self.enemy_agent.reset()
+
         # Load assets
         self.asset_manager.load_textures()
 
         # Create game objects
         self.player = self.object_factory.create_player()
-        self.enemies = self.object_factory.create_enemies(self.config.max_enemies)
+        self.enemies = self.object_factory.create_enemies(
+            self.config.max_enemies,
+        )
 
         # Initialize level
-        self.level = self.object_factory.create_level(self.player, self.enemies)
+        self.level = self.object_factory.create_level(
+            self.player,
+            self.enemies,
+        )
 
         # Initialize physics system with new level data
         self.physics_system.setup_collision_grid(self.level.walls)
