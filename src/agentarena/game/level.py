@@ -55,7 +55,6 @@ class Level:
 
     def generate_level(self) -> None:
         """Generate a complete level with walls and obstacles."""
-        print("Generating level...")
         self.walls = []
         self.wall_models = []
 
@@ -64,11 +63,8 @@ class Level:
         self.generate_wall_clusters()
         self.ensure_playable()
 
-        print(f"Level generation complete with {len(self.walls)} walls")
-
     def add_border_walls(self) -> None:
         """Add walls around the border of the screen."""
-        print("Adding border walls...")
         wall_count_horizontal: int = int(self.config.display_width / self.config.block_width) + 1
         wall_count_vertical: int = int(self.config.display_height / self.config.block_height) + 1
 
@@ -91,8 +87,6 @@ class Level:
             1,
             wall_count_vertical - 1,
         )
-
-        print(f"Border walls added: {len(self.walls)}")
 
     def _add_wall_row(self, start_x: int, y: int, count: int) -> None:
         """
@@ -122,12 +116,8 @@ class Level:
 
     def generate_wall_clusters(self) -> None:
         """Generate clusters of walls with better placement coverage."""
-        print("Generating wall clusters...")
 
         # Debug info
-        print(f"Display dimensions: {self.config.display_width}x{self.config.display_height}")
-        print(f"Block dimensions: {self.config.block_width}x{self.config.block_height}")
-        print(f"Grid dimensions: {self.grid_width}x{self.grid_height}")
 
         # Parameters for wall generation
         max_attempts = 150
@@ -173,17 +163,8 @@ class Level:
                     new_walls.append(new_wall)
 
                 clusters_created += 1
-                print(
-                    f"Created cluster #{clusters_created} at ({grid_x}, {grid_y}) with {len(new_walls)} walls",
-                )
             else:
                 failed_attempts += 1
-                if failed_attempts % 20 == 0:
-                    print(f"Failed {failed_attempts} attempts to place clusters")
-
-        print(
-            f"Wall cluster generation complete. Created {clusters_created} clusters after {attempt_count} attempts.",
-        )
 
         # If we couldn't create enough clusters, add some random walls
         if clusters_created < MIN_CLUSTERS:
@@ -212,7 +193,6 @@ class Level:
 
     def _add_random_walls(self) -> None:
         """Add random individual walls when cluster generation fails."""
-        print("Adding some random individual walls...")
         random_walls_to_add = random.randint(MIN_RANDOM_WALLS, MAX_RANDOM_WALLS)
         random_walls_added = 0
         max_attempts = 50
@@ -230,8 +210,6 @@ class Level:
                 y = grid_y * self.config.block_height
                 self._create_wall(x, y)
                 random_walls_added += 1
-
-        print(f"Added {random_walls_added} random individual walls")
 
     def _is_position_valid(self, grid_x: int, grid_y: int) -> bool:
         """
@@ -276,7 +254,6 @@ class Level:
 
     def ensure_playable(self) -> None:
         """Ensure player and enemies are not fully surrounded by walls."""
-        print("Ensuring level is playable...")
 
         # Check and fix for player
         if self.player is not None:
@@ -285,8 +262,6 @@ class Level:
         # Check and fix for all enemies
         for enemy in self.enemies:
             self._clear_adjacent_if_needed(enemy)
-
-        print("Playability check complete")
 
     def _clear_adjacent_if_needed(self, entity: Player) -> None:
         """
@@ -317,7 +292,6 @@ class Level:
 
         # If all are blocked, remove one wall to create an opening
         if not has_free_space and self.walls:
-            print(f"Entity at ({entity.x}, {entity.y}) is trapped, clearing a path")
 
             # Try directions in order (prefer clearing in a specific direction)
             for adj_x, adj_y, _, _ in adjacents:
@@ -421,5 +395,3 @@ class Level:
                 height=wall_model.height,
             )
             self.walls.append(wall)
-
-        print(f"Loaded level with {len(self.walls)} walls")

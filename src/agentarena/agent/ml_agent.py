@@ -97,34 +97,50 @@ class ReplayMemory:
 
 
 class DQNModel(nn.Module):
-    """Deep Q-Network model architecture"""
-
-    def __init__(self, input_size: int, output_size: int) -> None:
-        """
-        Initialize the neural network.
-
-        Args:
-            input_size: Dimension of input state vector
-            output_size: Number of possible actions
-        """
+    def __init__(
+        self, input_size: int, output_size: int, hidden_layer_sizes: list[int] = [128, 128]
+    ) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(input_size, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, output_size)
+        # Wider network
+        self.fc1 = nn.Linear(input_size, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, output_size)
+
+        # Add dropout to prevent overfitting
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the network.
-
-        Args:
-            x: Input tensor
-
-        Returns:
-            Output tensor with Q-values
-        """
         x = F.relu(self.fc1(x))
+        x = self.dropout(x)
         x = F.relu(self.fc2(x))
+        x = self.dropout(x)
         return self.fc3(x)
+
+
+"""
+class DQNModel(nn.Module):
+
+    def __init__(
+        self, input_size: int, output_size: int, hidden_layer_sizes: list[int] = [128, 128]
+    ) -> None:
+        super().__init__()
+
+        # Use the provided hidden layer sizes
+        self.layer_sizes = [input_size] + hidden_layer_sizes + [output_size]
+
+        # Create layers dynamically based on the configuration
+        self.layers = nn.ModuleList()
+        for i in range(len(self.layer_sizes) - 1):
+            self.layers.append(nn.Linear(self.layer_sizes[i], self.layer_sizes[i + 1]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Apply ReLU activation to all but the last layer
+        for i, layer in enumerate(self.layers[:-1]):
+            x = F.relu(layer(x))
+
+        # No activation on the output layer
+        return self.layers[-1](x)
+"""
 
 
 class MLAgent(Agent):
@@ -156,6 +172,7 @@ class MLAgent(Agent):
         """
         super().__init__(name)
         self.is_training = is_training
+        self.recent_actions = []
 
         # Use config if provided, otherwise use default parameters
         if config:
@@ -166,6 +183,7 @@ class MLAgent(Agent):
             self.learning_rate = config.learning_rate
             self.batch_size = config.batch_size
             self.memory_capacity = config.memory_capacity
+            self.hidden_layer_sizes = config.hidden_layer_sizes
         else:
             # Hyperparameters
             self.gamma = gamma  # Discount factor
@@ -175,6 +193,7 @@ class MLAgent(Agent):
             self.learning_rate = learning_rate  # Learning rate
             self.batch_size = 64
             self.memory_capacity = 10000
+            self.hidden_layer_sizes = [128, 128]  # Default hidden layer sizes
 
         # Setup the action space
         self.directions = [
@@ -214,8 +233,13 @@ class MLAgent(Agent):
         Returns:
             Initialized DQN model
         """
-        model = DQNModel(state_size, self.n_actions)
+        model = DQNModel(
+            state_size,
+            self.n_actions,
+            hidden_layer_sizes=self.hidden_layer_sizes,
+        )
         self.optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=100, gamma=0.995)
         return model
 
     def reset(self) -> None:
@@ -374,6 +398,37 @@ class MLAgent(Agent):
         # Store the selected action for learning
         if self.is_training:
             self.last_action = action_idx
+        # Every 1000 calls, debug Q-values
+        if hasattr(self, "get_action_count"):
+            self.get_action_count += 1
+        else:
+            self.get_action_count = 0
+
+        if self.get_action_count % 1000 == 0:
+            with torch.no_grad():
+                q_values = self.model(state_tensor).cpu().numpy()[0]
+                min_q = q_values.min()
+                max_q = q_values.max()
+                q_range = max_q - min_q
+
+                print(f"Q-values - min: {min_q:.4f}, max: {max_q:.4f}, range: {q_range:.4f}")
+                if q_range < 0.1:
+                    print(
+                        "WARNING: Q-values have very small range - all actions seem similar to agent"
+                    )
+
+                # Print top 3 actions and their values
+                top_actions = np.argsort(q_values)[-3:][::-1]
+                for i, action_idx in enumerate(top_actions):
+                    action = self._action_to_game_action(action_idx)
+                    print(
+                        f"Top {i+1}: Action {action_idx} ({action.direction}, "
+                        f"shoot={action.is_shooting}) - Q={q_values[action_idx]:.4f}"
+                    )
+        if self.is_training:
+            self.recent_actions.append(action_idx)
+            if len(self.recent_actions) > 100:
+                self.recent_actions.pop(0)
 
         return action
 
@@ -388,6 +443,11 @@ class MLAgent(Agent):
         """
         if not self.is_training or self.last_state is None or self.last_action is None:
             return
+        if len(self.recent_actions) > 20:  # Need enough history
+            # Count action frequencies
+            action_counts = {}
+            for a in self.recent_actions:
+                action_counts[a] = action_counts.get(a, 0) + 1
 
         # Accumulate reward
         self.accumulated_reward += reward
@@ -432,6 +492,7 @@ class MLAgent(Agent):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        self.scheduler.step()
 
     def save_model(self, path: str) -> None:
         """
@@ -447,6 +508,7 @@ class MLAgent(Agent):
                     "state_size": self.state_size,
                     "n_actions": self.n_actions,
                     "epsilon": self.epsilon,
+                    "hidden_layer_sizes": self.hidden_layer_sizes,
                 },
                 path,
             )
@@ -463,7 +525,10 @@ class MLAgent(Agent):
         self.n_actions = checkpoint["n_actions"]
         self.epsilon = checkpoint["epsilon"]
 
-        # Initialize model with correct dimensions
+        # Load hidden layer sizes if available, otherwise use default
+        self.hidden_layer_sizes = checkpoint.get("hidden_layer_sizes", [128, 128])
+
+        # Initialize model with correct dimensions and hidden layer configuration
         self.model = self._initialize_model(self.state_size)
 
         # Load weights
