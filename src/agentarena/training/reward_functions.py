@@ -12,6 +12,7 @@ from agentarena.models.events import (
     GameEvent,
     PlayerHitEvent,
 )
+
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import RewardType
 
