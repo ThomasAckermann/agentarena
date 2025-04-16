@@ -292,7 +292,6 @@ class Level:
 
         # If all are blocked, remove one wall to create an opening
         if not has_free_space and self.walls:
-
             # Try directions in order (prefer clearing in a specific direction)
             for adj_x, adj_y, _, _ in adjacents:
                 adj_rect = pygame.Rect(

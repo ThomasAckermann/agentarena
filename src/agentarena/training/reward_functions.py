@@ -2,8 +2,9 @@
 Reward functions for reinforcement learning in AgentArena.
 """
 
-from enum import Enum
+import math
 
+from agentarena.agent.agent import Agent
 from agentarena.models.events import (
     BulletFiredEvent,
     EnemyHitEvent,
@@ -11,28 +12,12 @@ from agentarena.models.events import (
     GameEvent,
     PlayerHitEvent,
 )
-import math
+from agentarena.models.training import RewardType
 from agentarena.models.observations import GameObservation
 
 # Constants for reward calculations
 NEARBY_DISTANCE_THRESHOLD = 300.0  # Distance threshold for considering enemies "nearby"
 BULLET_DODGE_DISTANCE = 100.0  # Distance threshold for bullet dodging detection
-
-
-class RewardType(Enum):
-    """
-    Types of reward functions available for training.
-    """
-
-    BASIC = "basic"  # Simple rewards for hits and avoiding damage
-    AGGRESSIVE = "aggressive"  # Prioritizes dealing damage over safety
-    DEFENSIVE = "defensive"  # Prioritizes staying alive over dealing damage
-    ADVANCED = "advanced"  # More nuanced reward calculation with more factors
-    ENHANCED = "enhanced"  # More nuanced reward calculation with more factors
-
-
-def normalize_reward(reward: float) -> float:
-    return math.tanh(reward / 70.0)  # Divide by a scaling factor
 
 
 def calculate_reward(
@@ -62,8 +47,10 @@ def calculate_reward(
     elif reward_type == RewardType.ADVANCED:
         return _advanced_reward(events, observation, previous_observation)
     elif reward_type == RewardType.ENHANCED:
-        return normalize_reward(
-            _enhanced_reward(events, observation, previous_observation),
+        return _enhanced_reward(
+            events,
+            observation,
+            previous_observation,
         )
 
     # Invalid reward type
@@ -92,14 +79,14 @@ def _basic_reward(
     # Reward for hitting enemies
     for event in events:
         if isinstance(event, EnemyHitEvent):
-            reward += 1.0
+            reward += 2.0
         elif isinstance(event, PlayerHitEvent):
             reward -= 1.0
         elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
             reward += 1.0  # Bonus for destroying an enemy
 
-    # Small penalty for each step to encourage faster completion
-    reward -= 0.01
+    # Penalty for each step to encourage faster completion
+    # reward -= 0.3
 
     return reward
 
@@ -295,9 +282,7 @@ def _advanced_reward(
 
             # If player intended to move but moved less than a small threshold
             if movement_intent and distance_moved < 2.0:  # Threshold for detecting wall collision
-                reward -= 0.5  # Significant penalty for hitting a wall
-                # Uncomment for debugging:
-                # print(f"Wall collision detected! Distance moved: {distance_moved:.2f}, Penalty: -0.5")
+                reward -= 1  # Significant penalty for hitting a wall
 
         # Reward for dodging bullets
         prev_bullets_near = len(previous_observation.bullets_near_player(BULLET_DODGE_DISTANCE))
@@ -395,30 +380,6 @@ def calculate_tactical_reward(
     return reward
 
 
-def calculate_spatial_awareness_reward(observation, previous_observation):
-    """Reward agent for staying aware of its surroundings"""
-    reward = 0
-
-    # Reward for maintaining good distance from enemies
-    if observation.enemies:
-        for enemy in observation.enemies:
-            distance = (
-                (enemy.x - observation.player.x) ** 2 + (enemy.y - observation.player.y) ** 2
-            ) ** 0.5
-
-            # Too close is dangerous
-            if distance < 100:
-                reward -= 0.1
-            # Optimal combat distance
-            elif 100 <= distance <= 300:
-                reward += 0.05
-            # Too far is ineffective
-            else:
-                reward -= 0.01
-
-    return reward
-
-
 def calculate_strategic_reward(observation, previous_observation):
     """Reward strategic positioning and planning"""
     reward = 0
@@ -502,29 +463,132 @@ def calculate_learning_reward(observation, agent):
     return reward
 
 
+def calculate_map_control_reward(observation: GameObservation, agent=None):
+    """
+    Reward for controlling and exploring the map strategically.
+
+    Args:
+        observation: Current game state observation
+        agent: The agent instance (to track visited positions)
+
+    Returns:
+        float: Map control reward
+    """
+    reward = 0.0
+
+    # Check if agent has position_history attribute, create if not
+    if agent and not hasattr(agent, "position_history"):
+        agent.position_history = []
+        agent.position_grid = {}  # Grid-based position tracking
+        agent.last_new_area_time = 0
+
+    if agent and hasattr(agent, "position_history"):
+        # Get current player position
+        player_pos = (observation.player.x, observation.player.y)
+
+        # Convert to grid coordinates for efficient spatial tracking
+        grid_size = 50  # Size of each grid cell (adjust based on game scale)
+        grid_x = int(player_pos[0] / grid_size)
+        grid_y = int(player_pos[1] / grid_size)
+        grid_pos = (grid_x, grid_y)
+
+        # Check if player has visited a new area
+        if grid_pos not in agent.position_grid:
+            agent.position_grid[grid_pos] = observation.game_time
+            agent.last_new_area_time = observation.game_time
+
+            # Reward for exploring new area
+            reward += 0.5
+
+        # Penalize staying in the same area too long
+        time_since_new_area = observation.game_time - agent.last_new_area_time
+        if time_since_new_area > 10.0:  # If more than 10 seconds in same areas
+            reward -= 0.05
+
+        # Add current position to history and maintain reasonable size
+        agent.position_history.append(player_pos)
+        if len(agent.position_history) > 100:
+            agent.position_history.pop(0)
+
+    return reward
+
+
+# Utility functions
+def _calculate_distance(entity1, entity2):
+    """Calculate Euclidean distance between two entities."""
+    return ((entity1.x - entity2.x) ** 2 + (entity1.y - entity2.y) ** 2) ** 0.5
+
+
+def _check_shot_alignment(observation: GameObservation):
+    """
+    Check how well aligned the player's shot is with enemies.
+    Returns a value from 0 (no alignment) to 1 (perfect alignment).
+    """
+    player = observation.player
+    if not player.orientation:
+        return 0
+
+    # No enemies means no alignment
+    if not observation.enemies:
+        return 0
+
+    # Find the enemy that best aligns with the shot direction
+    best_alignment = 0
+    for enemy in observation.enemies:
+        # Vector from player to enemy
+        to_enemy = [enemy.x - player.x, enemy.y - player.y]
+
+        # Normalize the vector
+        distance = (to_enemy[0] ** 2 + to_enemy[1] ** 2) ** 0.5
+        if distance > 0:
+            to_enemy = [to_enemy[0] / distance, to_enemy[1] / distance]
+
+            # Calculate alignment using dot product
+            alignment = player.orientation[0] * to_enemy[0] + player.orientation[1] * to_enemy[1]
+
+            # Convert from [-1, 1] to [0, 1] range and improve precision of alignment
+            alignment = max(0, alignment)  # Only care about positive alignment
+
+            # Higher weight for closer enemies
+            if distance > 0:
+                distance_factor = min(1.0, 500.0 / distance)  # Scale with distance
+                weighted_alignment = alignment * distance_factor
+
+                best_alignment = max(best_alignment, weighted_alignment)
+
+    return best_alignment
+
+
 def _enhanced_reward(
     events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: GameObservation | None = None,
-    agent=None,  # Pass the agent for tracking action history
+    previous_observation: GameObservation = None,
+    agent: Agent | None = None,
 ) -> float:
     """
-    Enhanced reward function combining multiple strategies.
+    Extended version of the enhanced reward function that includes the new reward components.
+
+    Args:
+        events: List of events from the current step
+        observation: Current game state observation
+        previous_observation: Previous game state observation
+        agent: The agent object for tracking history
+
+    Returns:
+        float: Total enhanced reward including new components
     """
-    # Base reward from original function
+
+    # Get the base reward from the original function
     reward = _basic_reward(events, observation, previous_observation)
-
-    # Add tactical combat rewards
-    reward += calculate_tactical_reward(events, observation, previous_observation)
-
-    # Add spatial awareness rewards
-    reward += calculate_spatial_awareness_reward(observation, previous_observation)
-
-    # Add strategic planning rewards
+    reward += calculate_tactical_reward(
+        events,
+        observation,
+        previous_observation,
+    )
     reward += calculate_strategic_reward(observation, previous_observation)
-
-    # Add learning progress rewards (if agent is provided)
     if agent:
         reward += calculate_learning_reward(observation, agent)
 
-    return reward
+    reward += calculate_map_control_reward(observation, agent)
+
+    return math.tanh(reward / 10)

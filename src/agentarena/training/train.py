@@ -16,10 +16,10 @@ from torch.utils.tensorboard import SummaryWriter
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.models.config import load_config
+from agentarena.models.events import PlayerHitEvent
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
-from agentarena.models.events import PlayerHitEvent
 
 
 def train(
@@ -216,6 +216,7 @@ def train(
                 f"- Reward: {episode_reward:.2f} "
                 f"- Avg Reward: {avg_reward:.2f} "
                 f"- Epsilon: {player_agent.epsilon:.4f}",
+                f"- Learning Rate: {player_agent.scheduler.get_lr()[0]}",
             )
 
             # Save model periodically

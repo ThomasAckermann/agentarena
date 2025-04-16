@@ -17,7 +17,6 @@ class EventManager:
 
     def __init__(self) -> None:
         """Initialize the event manager."""
-        pass
 
     def create_bullet_fired_event(self, events, game_time, owner_id, direction, position) -> None:
         """
@@ -36,7 +35,7 @@ class EventManager:
                 owner_id=owner_id,
                 direction=direction,
                 position=position,
-            )
+            ),
         )
 
     def create_enemy_hit_event(self, events, game_time, enemy_id, x, y) -> None:
@@ -56,7 +55,7 @@ class EventManager:
                 enemy_id=enemy_id,
                 damage=1,
                 position=(x, y),
-            )
+            ),
         )
 
     def create_player_hit_event(self, events, game_time, bullet_owner, x, y) -> None:
@@ -76,11 +75,17 @@ class EventManager:
                 damage=1,
                 bullet_owner=bullet_owner,
                 position=(x, y),
-            )
+            ),
         )
 
     def create_entity_destroyed_event(
-        self, events, game_time, entity_id, entity_type, x, y
+        self,
+        events,
+        game_time,
+        entity_id,
+        entity_type,
+        x,
+        y,
     ) -> None:
         """
         Create an entity destroyed event and add it to the events list.
@@ -102,7 +107,7 @@ class EventManager:
                     x if x is not None else 0,
                     y if y is not None else 0,
                 ),
-            )
+            ),
         )
 
     def create_player_destroyed_event(self, events, game_time, player) -> None:
@@ -123,5 +128,5 @@ class EventManager:
                     player.x if player.x is not None else 0,
                     player.y if player.y is not None else 0,
                 ),
-            )
+            ),
         )

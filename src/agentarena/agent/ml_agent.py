@@ -17,12 +17,19 @@ from agentarena.models.training import Experience, MLAgentConfig
 # Constants for state encoding
 MAX_ENEMIES = 3  # Match with config.max_enemies
 MAX_BULLETS = 5
-ENEMY_FEATURES = 5  # Features per enemy: rel_x, rel_y, distance, angle, health
+ENEMY_FEATURES = 7  # Features per enemy: rel_x, rel_y, abs_x, abs_y, distance, angle, health
 BULLET_FEATURES = 5  # Features per bullet: rel_x, rel_y, distance, direction_danger, is_enemy
-PLAYER_FEATURES = 1  # Health
+PLAYER_FEATURES = 3  # Health + absolute x,y position (normalized)
+WALL_FEATURES = 8  # Distance to nearest wall in 8 directions
+
 
 # Calculate expected state vector size
-STATE_SIZE = PLAYER_FEATURES + (MAX_ENEMIES * ENEMY_FEATURES) + (MAX_BULLETS * BULLET_FEATURES)
+STATE_SIZE = (
+    PLAYER_FEATURES
+    + (MAX_ENEMIES * ENEMY_FEATURES)
+    + (MAX_BULLETS * BULLET_FEATURES)
+    + WALL_FEATURES
+)
 
 
 class ReplayMemory:
@@ -96,51 +103,63 @@ class ReplayMemory:
         return len(self.memory)
 
 
+class DQNModel_old(nn.Module):
+    def __init__(self, input_size: int, output_size: int) -> None:
+        super().__init__()
+        # Shared feature layers
+        self.feature_layer = nn.Sequential(
+            nn.Linear(input_size, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 256),
+            nn.LeakyReLU(),
+        )
+
+        # Value stream
+        self.value_stream = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 1),
+        )
+
+        # Advantage stream
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.LeakyReLU(),
+            nn.Linear(128, output_size),
+        )
+
+    def forward(self, x):
+        features = self.feature_layer(x)
+
+        value = self.value_stream(features)
+        advantage = self.advantage_stream(features)
+
+        # Combine value and advantage streams
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+        return q_values
+
+
 class DQNModel(nn.Module):
     def __init__(
-        self, input_size: int, output_size: int, hidden_layer_sizes: list[int] = [128, 128]
+        self,
+        input_size: int,
+        output_size: int,
     ) -> None:
         super().__init__()
         # Wider network
-        self.fc1 = nn.Linear(input_size, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, output_size)
+        self.fc1 = nn.Linear(input_size, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, 64)
+        self.fc4 = nn.Linear(64, output_size)
 
         # Add dropout to prevent overfitting
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout(x)
-        return self.fc3(x)
-
-
-"""
-class DQNModel(nn.Module):
-
-    def __init__(
-        self, input_size: int, output_size: int, hidden_layer_sizes: list[int] = [128, 128]
-    ) -> None:
-        super().__init__()
-
-        # Use the provided hidden layer sizes
-        self.layer_sizes = [input_size] + hidden_layer_sizes + [output_size]
-
-        # Create layers dynamically based on the configuration
-        self.layers = nn.ModuleList()
-        for i in range(len(self.layer_sizes) - 1):
-            self.layers.append(nn.Linear(self.layer_sizes[i], self.layer_sizes[i + 1]))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Apply ReLU activation to all but the last layer
-        for i, layer in enumerate(self.layers[:-1]):
-            x = F.relu(layer(x))
-
-        # No activation on the output layer
-        return self.layers[-1](x)
-"""
+        x = F.leaky_relu(self.fc1(x))
+        x = F.leaky_relu(self.fc2(x))
+        x = F.leaky_relu(self.fc3(x))
+        return self.fc4(x)
 
 
 class MLAgent(Agent):
@@ -183,7 +202,6 @@ class MLAgent(Agent):
             self.learning_rate = config.learning_rate
             self.batch_size = config.batch_size
             self.memory_capacity = config.memory_capacity
-            self.hidden_layer_sizes = config.hidden_layer_sizes
         else:
             # Hyperparameters
             self.gamma = gamma  # Discount factor
@@ -193,7 +211,6 @@ class MLAgent(Agent):
             self.learning_rate = learning_rate  # Learning rate
             self.batch_size = 64
             self.memory_capacity = 10000
-            self.hidden_layer_sizes = [128, 128]  # Default hidden layer sizes
 
         # Setup the action space
         self.directions = [
@@ -236,10 +253,13 @@ class MLAgent(Agent):
         model = DQNModel(
             state_size,
             self.n_actions,
-            hidden_layer_sizes=self.hidden_layer_sizes,
         )
         self.optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=100, gamma=0.995)
+        self.scheduler = optim.lr_scheduler.StepLR(
+            self.optimizer,
+            step_size=1000,
+            gamma=0.995,
+        )
         return model
 
     def reset(self) -> None:
@@ -253,83 +273,121 @@ class MLAgent(Agent):
             self.epsilon *= self.epsilon_decay
 
     def encode_observation(self, observation: GameObservation) -> np.ndarray:
-        """
-        Convert game observation to a state vector for the neural network.
-
-        Args:
-            observation: Current game state
-
-        Returns:
-            numpy array: Encoded state vector
-        """
+        """Enhanced state encoding with walls and absolute position."""
         # Extract player information
         player = observation.player
         player_x = player.x
         player_y = player.y
         player_health = player.health
 
-        # Process enemies
+        # Normalize absolute position to [0,1] range
+        norm_x = player_x / 1200.0  # Assuming 1200 is display width
+        norm_y = player_y / 900.0  # Assuming 900 is display height
+
+        # Process enemies (existing code)
         enemy_features = []
         for enemy in observation.enemies[:MAX_ENEMIES]:
             # Calculate relative position to player
             rel_x = enemy.x - player_x
             rel_y = enemy.y - player_y
+            abs_enemy_x = enemy.x
+            abs_enemy_y = enemy.y
             distance = np.sqrt(rel_x**2 + rel_y**2)
 
-            # Calculate angle between player and enemy
-            angle = np.arctan2(rel_y, rel_x)
+            # Normalize relative positions
+            rel_x /= 1200.0
+            rel_y /= 900.0
+            abs_enemy_x /= 1200.0
+            abs_enemy_y /= 900.0
+            distance /= np.sqrt(1200.0**2 + 900.0**2)
 
-            # Add enemy health
-            enemy_health = enemy.health
+            # Calculate angle between player and enemy
+            angle = np.arctan2(rel_y, rel_x) / np.pi  # Normalize to [-1,1]
+
+            # Add enemy health (normalized)
+            enemy_health = enemy.health / 3.0  # Assuming max health is 3
 
             enemy_features.extend(
-                [rel_x, rel_y, distance, angle, enemy_health],
+                [
+                    rel_x,
+                    rel_y,
+                    abs_enemy_x,
+                    abs_enemy_y,
+                    distance,
+                    angle,
+                    enemy_health,
+                ]
             )
 
-        # Pad if there are fewer enemies than expected
+        # Pad enemy features if needed (existing code)
         expected_enemy_features = MAX_ENEMIES * ENEMY_FEATURES
-
         if len(enemy_features) < expected_enemy_features:
-            # Pad with zeros for missing enemies
             padding = [0] * (expected_enemy_features - len(enemy_features))
             enemy_features.extend(padding)
 
-        # Process bullets
+        # Process bullets (existing code with normalization)
         bullet_features = []
         for bullet in observation.bullets[:MAX_BULLETS]:
-            # Calculate relative position to player
-            rel_x = bullet.x - player_x
-            rel_y = bullet.y - player_y
+            rel_x = (bullet.x - player_x) / 1200.0
+            rel_y = (bullet.y - player_y) / 900.0
             distance = np.sqrt(rel_x**2 + rel_y**2)
 
-            # Calculate danger level (is this bullet coming toward the player?)
+            # Direction danger calculation
             dx, dy = bullet.direction
-            # Dot product between bullet direction and direction to player
             direction_danger = -(rel_x * dx + rel_y * dy) / (distance + 1e-6)
 
-            # Is this an enemy bullet?
             is_enemy = 1 if bullet.owner != "player" else 0
 
-            bullet_features.extend(
-                [rel_x, rel_y, distance, direction_danger, is_enemy],
-            )
+            bullet_features.extend([rel_x, rel_y, distance, direction_danger, is_enemy])
 
-        # Pad bullet features if needed
+        # Pad bullet features if needed (existing code)
         expected_bullet_features = MAX_BULLETS * BULLET_FEATURES
-
         if len(bullet_features) < expected_bullet_features:
             padding = [0] * (expected_bullet_features - len(bullet_features))
             bullet_features.extend(padding)
 
+        # NEW: Calculate distances to walls in 8 directions
+        # Note: This would require access to the level's wall data
+        # For now, I'll use screen boundaries as a proxy for walls
+        wall_features = []
+
+        # Distances to screen edges (normalized to [0,1])
+        dist_left = player_x / 1200.0
+        dist_right = (1200.0 - player_x) / 1200.0
+        dist_up = player_y / 900.0
+        dist_down = (900.0 - player_y) / 900.0
+
+        # Diagonal distances (approximate)
+        dist_up_left = min(dist_left, dist_up)
+        dist_up_right = min(dist_right, dist_up)
+        dist_down_left = min(dist_left, dist_down)
+        dist_down_right = min(dist_right, dist_down)
+
+        wall_features = [
+            dist_left,
+            dist_right,
+            dist_up,
+            dist_down,
+            dist_up_left,
+            dist_up_right,
+            dist_down_left,
+            dist_down_right,
+        ]
+
+        # For a more accurate implementation, you'd use raycasting to find
+        # actual distances to walls in each direction
+
         # Combine all features
-        state = [player_health] + enemy_features + bullet_features
+        state = (
+            [player_health / 3.0, norm_x, norm_y] + enemy_features + bullet_features + wall_features
+        )
 
         # Ensure we always have the correct state size
         assert (
             len(state) == self.state_size
         ), f"State size mismatch: got {len(state)}, expected {self.state_size}"
 
-        return np.array(state, dtype=np.float32)
+        return np.tanh(np.array(state, dtype=np.float32))
 
     def _action_to_game_action(self, action_idx: int) -> Action:
         """
@@ -407,24 +465,10 @@ class MLAgent(Agent):
         if self.get_action_count % 1000 == 0:
             with torch.no_grad():
                 q_values = self.model(state_tensor).cpu().numpy()[0]
-                min_q = q_values.min()
-                max_q = q_values.max()
-                q_range = max_q - min_q
 
-                print(f"Q-values - min: {min_q:.4f}, max: {max_q:.4f}, range: {q_range:.4f}")
-                if q_range < 0.1:
-                    print(
-                        "WARNING: Q-values have very small range - all actions seem similar to agent"
-                    )
-
-                # Print top 3 actions and their values
                 top_actions = np.argsort(q_values)[-3:][::-1]
-                for i, action_idx in enumerate(top_actions):
+                for action_idx in top_actions:
                     action = self._action_to_game_action(action_idx)
-                    print(
-                        f"Top {i+1}: Action {action_idx} ({action.direction}, "
-                        f"shoot={action.is_shooting}) - Q={q_values[action_idx]:.4f}"
-                    )
         if self.is_training:
             self.recent_actions.append(action_idx)
             if len(self.recent_actions) > 100:
@@ -469,10 +513,17 @@ class MLAgent(Agent):
         experiences = self.memory.sample(self.batch_size)
 
         # Convert experiences to tensors
-        states = torch.FloatTensor(np.array([exp.state for exp in experiences]))
-        actions = torch.LongTensor([exp.action for exp in experiences]).unsqueeze(1)
+        states = torch.FloatTensor(
+            np.array([exp.state for exp in experiences]),
+        )
+        actions = torch.LongTensor(
+            [exp.action for exp in experiences],
+        ).unsqueeze(1)
         rewards = torch.FloatTensor([exp.reward for exp in experiences])
-        next_states = torch.FloatTensor(np.array([exp.next_state for exp in experiences]))
+        next_states = torch.FloatTensor(
+            np.array([exp.next_state for exp in experiences]),
+        )
+
         dones = torch.FloatTensor([exp.done for exp in experiences])
 
         # Compute current Q values
@@ -483,7 +534,7 @@ class MLAgent(Agent):
             next_q_values = self.model(next_states).max(1)[0]
 
         # Compute target Q values
-        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
+        target_q_values = torch.tanh(rewards + (1 - dones) * self.gamma * next_q_values)
 
         # Compute loss
         loss = F.smooth_l1_loss(current_q_values.squeeze(), target_q_values)
@@ -491,6 +542,7 @@ class MLAgent(Agent):
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         self.optimizer.step()
         self.scheduler.step()
 
@@ -508,7 +560,6 @@ class MLAgent(Agent):
                     "state_size": self.state_size,
                     "n_actions": self.n_actions,
                     "epsilon": self.epsilon,
-                    "hidden_layer_sizes": self.hidden_layer_sizes,
                 },
                 path,
             )
@@ -525,12 +576,7 @@ class MLAgent(Agent):
         self.n_actions = checkpoint["n_actions"]
         self.epsilon = checkpoint["epsilon"]
 
-        # Load hidden layer sizes if available, otherwise use default
-        self.hidden_layer_sizes = checkpoint.get("hidden_layer_sizes", [128, 128])
-
-        # Initialize model with correct dimensions and hidden layer configuration
         self.model = self._initialize_model(self.state_size)
 
-        # Load weights
         self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.model.eval()  # Set to evaluation mode
+        self.model.eval()
