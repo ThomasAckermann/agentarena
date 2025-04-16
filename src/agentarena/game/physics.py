@@ -5,7 +5,6 @@ Physics system for AgentArena, handling movement, collisions, and spatial partit
 import pygame
 from pygame.math import Vector2
 
-from agentarena.models.action import Action
 from agentarena.models.config import GameConfig
 from agentarena.models.events import CollisionEvent
 
@@ -125,7 +124,15 @@ class PhysicsSystem:
         return nearby_objects
 
     def apply_action(
-        self, agent_id, entity, action, bullets, events, game_time, object_factory, dt
+        self,
+        agent_id,
+        entity,
+        action,
+        bullets,
+        events,
+        game_time,
+        object_factory,
+        dt,
     ) -> None:
         """
         Apply an action to a player or enemy.
@@ -202,7 +209,11 @@ class PhysicsSystem:
 
             # Create bullet fired event
             object_factory.create_bullet_fired_event(
-                events, game_time, agent_id, (dx, dy), (center_x, center_y)
+                events,
+                game_time,
+                agent_id,
+                (dx, dy),
+                (center_x, center_y),
             )
 
             # Update ammunition and cooldown
@@ -321,12 +332,16 @@ class PhysicsSystem:
                     if enemy.rect.colliderect(bullet.rect):
                         # Create enemy hit event
                         object_factory.create_enemy_hit_event(
-                            events, game_time, enemy_idx, bullet.x, bullet.y
+                            events,
+                            game_time,
+                            enemy_idx,
+                            bullet.x,
+                            bullet.y,
                         )
 
                         # Create explosion at bullet impact position
                         explosions.append(
-                            object_factory.create_explosion(bullet.x, bullet.y, "enemy")
+                            object_factory.create_explosion(bullet.x, bullet.y, "enemy"),
                         )
 
                         # Update score
@@ -338,17 +353,21 @@ class PhysicsSystem:
 
                         # Check if enemy was destroyed
                         if enemy.health <= 0:
-                            print(f"Enemy {enemy_idx} defeated")
 
                             # Create destroyed event
                             object_factory.create_entity_destroyed_event(
-                                events, game_time, f"enemy_{enemy_idx}", "enemy", enemy.x, enemy.y
+                                events,
+                                game_time,
+                                f"enemy_{enemy_idx}",
+                                "enemy",
+                                enemy.x,
+                                enemy.y,
                             )
 
                             # Create a larger explosion at enemy position when destroyed
                             if enemy.x is not None and enemy.y is not None:
                                 explosions.append(
-                                    object_factory.create_explosion(enemy.x, enemy.y, "enemy")
+                                    object_factory.create_explosion(enemy.x, enemy.y, "enemy"),
                                 )
 
                             # Update score for enemy defeat
@@ -362,14 +381,17 @@ class PhysicsSystem:
             elif player is not None and bullet.rect.colliderect(player.rect):
                 # Player was hit by enemy bullet
                 object_factory.create_player_hit_event(
-                    events, game_time, bullet.owner, bullet.x, bullet.y
+                    events,
+                    game_time,
+                    bullet.owner,
+                    bullet.x,
+                    bullet.y,
                 )
 
                 # Create explosion at bullet impact position
                 explosions.append(object_factory.create_explosion(bullet.x, bullet.y, "player"))
 
                 player.health -= 1
-                print(f"Player hit! Health: {player.health}")
 
                 # Check if player was destroyed
                 if player.health <= 0 and player.x is not None and player.y is not None:
@@ -396,7 +418,7 @@ class PhysicsSystem:
                         # Determine which type of explosion to use based on bullet owner
                         explosion_type = "player" if bullet.owner == "player" else "enemy"
                         explosions.append(
-                            object_factory.create_explosion(bullet.x, bullet.y, explosion_type)
+                            object_factory.create_explosion(bullet.x, bullet.y, explosion_type),
                         )
 
                         collision_detected = True

@@ -35,6 +35,7 @@ class ManualAgent(Agent):
         Returns:
             Action: The player's action based on keyboard input
         """
+        del observation
         keys = pygame.key.get_pressed()
         is_shooting = False
         direction = None

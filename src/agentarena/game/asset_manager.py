@@ -3,9 +3,9 @@ Asset management system for AgentArena.
 """
 
 import pygame
+
 from agentarena.models.action import Direction
 from agentarena.models.config import GameConfig
-
 
 ASSET_PATH: str = "src/agentarena/assets"
 PLAYER_SCALE: float = 0.8  # Scale factor for player sprites

@@ -4,8 +4,8 @@ Rendering system for the AgentArena game.
 
 import pygame
 
-from agentarena.models.action import Direction, DIRECTION_VECTORS
 from agentarena.game.asset_manager import AssetManager
+from agentarena.models.action import DIRECTION_VECTORS, Direction
 from agentarena.models.config import GameConfig
 
 
@@ -13,7 +13,10 @@ class RenderingSystem:
     """Handles all visual rendering for the game."""
 
     def __init__(
-        self, screen: pygame.Surface, asset_manager: AssetManager, config: GameConfig
+        self,
+        screen: pygame.Surface,
+        asset_manager: AssetManager,
+        config: GameConfig,
     ) -> None:
         """
         Initialize the rendering system.
@@ -47,7 +50,7 @@ class RenderingSystem:
             self.ammo_texts[ammo] = self.font.render(f"Ammo: {ammo}", True, (255, 255, 255))
 
         # Initial score text
-        self.score_text = self.font.render(f"Score: 0", True, (255, 255, 255))
+        self.score_text = self.font.render("Score: 0", True, (255, 255, 255))
 
     def get_direction_from_vector(self, direction_vector) -> Direction:
         """Convert direction vector to Direction enum value."""

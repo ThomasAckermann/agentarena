@@ -384,7 +384,7 @@ class ObjectFactory:
                 owner_id=owner_id,
                 direction=direction,
                 position=position,
-            )
+            ),
         )
 
     def create_enemy_hit_event(self, events, game_time, enemy_id, x, y) -> None:
@@ -404,7 +404,7 @@ class ObjectFactory:
                 enemy_id=enemy_id,
                 damage=1,
                 position=(x, y),
-            )
+            ),
         )
 
     def create_player_hit_event(self, events, game_time, bullet_owner, x, y) -> None:
@@ -424,11 +424,17 @@ class ObjectFactory:
                 damage=1,
                 bullet_owner=bullet_owner,
                 position=(x, y),
-            )
+            ),
         )
 
     def create_entity_destroyed_event(
-        self, events, game_time, entity_id, entity_type, x, y
+        self,
+        events,
+        game_time,
+        entity_id,
+        entity_type,
+        x,
+        y,
     ) -> None:
         """
         Create an entity destroyed event and add it to the events list.
@@ -450,5 +456,5 @@ class ObjectFactory:
                     x if x is not None else 0,
                     y if y is not None else 0,
                 ),
-            )
+            ),
         )

@@ -16,8 +16,6 @@ from agentarena.game.physics import PhysicsSystem
 from agentarena.game.rendering import RenderingSystem
 from agentarena.models.config import GameConfig
 from agentarena.models.observations import GameObservation
-from agentarena.models.action import Action, Direction
-
 
 LOG_PATH: str = "src/agentarena/data"
 
@@ -130,12 +128,21 @@ class Game:
         if agent_id == "player" and self.player is not None:
             # Player observation
             return self.object_factory.create_player_observation(
-                self.player, self.enemies, self.bullets, self.game_time, self.score
+                self.player,
+                self.enemies,
+                self.bullets,
+                self.game_time,
+                self.score,
             )
         else:
             # Enemy observation (reverse perspective)
             return self.object_factory.create_enemy_observation(
-                agent_id, self.player, self.enemies, self.bullets, self.game_time, self.score
+                agent_id,
+                self.player,
+                self.enemies,
+                self.bullets,
+                self.game_time,
+                self.score,
             )
 
     def update(self) -> None:
@@ -153,9 +160,10 @@ class Game:
 
         # Check game over condition
         if self.player is not None and self.player.health <= 0:
-            print("Game Over! Player defeated.")
             self.event_manager.create_player_destroyed_event(
-                self.events, self.game_time, self.player
+                self.events,
+                self.game_time,
+                self.player,
             )
             self.save_episode_log()
             self.running = False
@@ -194,7 +202,12 @@ class Game:
 
         # Update positions of all bullets
         self.physics_system.move_bullets(
-            self.bullets, self.level.walls, self.config, self.events, self.game_time, self.dt
+            self.bullets,
+            self.level.walls,
+            self.config,
+            self.events,
+            self.game_time,
+            self.dt,
         )
 
         # Update collision grid with current positions
