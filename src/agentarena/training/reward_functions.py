@@ -12,8 +12,8 @@ from agentarena.models.events import (
     GameEvent,
     PlayerHitEvent,
 )
-from agentarena.models.training import RewardType
 from agentarena.models.observations import GameObservation
+from agentarena.models.training import RewardType
 
 # Constants for reward calculations
 NEARBY_DISTANCE_THRESHOLD = 300.0  # Distance threshold for considering enemies "nearby"

@@ -353,7 +353,6 @@ class PhysicsSystem:
 
                         # Check if enemy was destroyed
                         if enemy.health <= 0:
-
                             # Create destroyed event
                             object_factory.create_entity_destroyed_event(
                                 events,
