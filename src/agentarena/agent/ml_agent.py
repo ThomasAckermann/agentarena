@@ -316,7 +316,7 @@ class MLAgent(Agent):
                     distance,
                     angle,
                     enemy_health,
-                ]
+                ],
             )
 
         # Pad enemy features if needed (existing code)
