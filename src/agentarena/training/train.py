@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.models.config import load_config
-from agentarena.models.events import PlayerHitEvent
+from agentarena.models.events import PlayerHitEvent, EnemyHitEvent
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
@@ -76,7 +76,18 @@ def train(
     # Load checkpoint if provided
     if config.checkpoint_path and config.checkpoint_path.exists():
         print(f"Loading model from {config.checkpoint_path}")
-        player_agent.load_model(config.checkpoint_path)
+        player_agent = MLAgent(
+            is_training=True,
+            config=config.ml_config,  # Use the NEW config parameters
+        )
+
+        # Modified loading to only load weights, not hyperparameters
+        player_agent.load_model_weights_only(config.checkpoint_path)
+
+        print(
+            f"Model loaded with new parameters: LR={config.ml_config.learning_rate}, "
+            f"gamma={config.ml_config.gamma}, epsilon={config.ml_config.epsilon}"
+        )
 
     # Import game here to avoid circular imports
     from agentarena.game.game import Game
@@ -110,6 +121,7 @@ def train(
             game.reset()
             episode_reward = 0.0
             step = 0
+            enemy_hits = 0
 
             # Track events for this episode
             episode_events = []
@@ -136,17 +148,18 @@ def train(
 
                 # Calculate reward using the appropriate reward function
                 reward = calculate_reward(
-                    game.events,
-                    next_observation,
-                    previous_observation,
-                    config.reward_type,
+                    events=game.events,
+                    observation=next_observation,
+                    previous_observation=previous_observation,
+                    reward_type=config.reward_type,
                 )
                 player_hits = 0
 
-                # Inside the episode loop where you process events
                 for event in game.events:
                     if isinstance(event, PlayerHitEvent):
                         player_hits += 1
+                    if isinstance(event, EnemyHitEvent):
+                        enemy_hits += 1
 
                 episode_reward += reward
 
@@ -194,11 +207,12 @@ def train(
             writer.add_scalar("Reward/average", avg_reward, episode)
             writer.add_scalar("Length/episode", step, episode)
             writer.add_scalar("Exploration/epsilon", player_agent.epsilon, episode)
-            writer.add_scalar("Metrics/PlayerHits", player_hits, episode)
 
             # Log win rate
             win_rate = sum(1 for ep in episode_details[-window_size:] if ep.win) / window_size
             writer.add_scalar("Performance/win_rate", win_rate, episode)
+            writer.add_scalar("Performance/enemy_hits", enemy_hits, episode)
+            writer.add_scalar("Performance/hits_per_step", enemy_hits / max(1, step), episode)
 
             # Log histogram of Q-values if available
             if hasattr(player_agent, "model") and step > 0:
@@ -217,6 +231,7 @@ def train(
                 f"- Avg Reward: {avg_reward:.2f} "
                 f"- Epsilon: {player_agent.epsilon:.4f}",
                 f"- Learning Rate: {player_agent.scheduler.get_lr()[0]}",
+                f"- Enemy Hits: {enemy_hits} ",  # Added this line
             )
 
             # Save model periodically
@@ -417,7 +432,11 @@ def evaluate(
                 next_observation = game.get_observation("player")
 
                 # Calculate reward from events (for statistics only)
-                reward = calculate_reward(game.events, next_observation, previous_observation)
+                reward = calculate_reward(
+                    events=game.events,
+                    observation=next_observation,
+                    previous_observation=previous_observation,
+                )
                 episode_reward += reward
 
                 # Store events for logging

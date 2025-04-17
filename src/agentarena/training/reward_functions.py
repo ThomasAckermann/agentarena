@@ -80,14 +80,14 @@ def _basic_reward(
     # Reward for hitting enemies
     for event in events:
         if isinstance(event, EnemyHitEvent):
-            reward += 2.0
+            reward += 4.0
         elif isinstance(event, PlayerHitEvent):
-            reward -= 1.0
+            reward -= 2.0
         elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
-            reward += 1.0  # Bonus for destroying an enemy
+            reward += 5.0  # Bonus for destroying an enemy
 
     # Penalty for each step to encourage faster completion
-    # reward -= 0.3
+    reward -= 0.1
 
     return reward
 
@@ -398,7 +398,7 @@ def calculate_strategic_reward(observation, previous_observation):
     # Reward for not getting cornered
     # Count walls or screen edges nearby
     boundaries = 0
-    screen_margin = 50
+    screen_margin = 128
 
     # Check proximity to screen edges
     if observation.player.x < screen_margin:
@@ -410,9 +410,7 @@ def calculate_strategic_reward(observation, previous_observation):
     if observation.player.y > 900 - screen_margin:  # Assuming 900 height
         boundaries += 1
 
-    # Penalty for being near too many boundaries (cornered)
-    if boundaries >= 2:
-        reward -= 0.2 * boundaries
+    reward -= 0.1 * boundaries
 
     return reward
 
@@ -453,8 +451,8 @@ def calculate_learning_reward(observation, agent):
 
             # Even higher reward if current action is rarely used
             current_action_freq = action_counts.get(current_action, 0) / total
-            if current_action_freq < 0.1:  # Rarely used action
-                reward += 0.5
+            if current_action_freq > 0.8:  # Rarely used action
+                reward -= 0.5
 
     # Update action history
     agent.action_history.append(current_action)
@@ -560,14 +558,23 @@ def _check_shot_alignment(observation: GameObservation):
     return best_alignment
 
 
+def winning_reward(observation: GameObservation) -> float:
+    reward = 0
+    current_enemy_count = len(observation.enemies)
+    if current_enemy_count == 0:
+        reward += 20.0
+    return reward
+
+
 def _enhanced_reward(
     events: list[GameEvent],
     observation: GameObservation,
-    previous_observation: GameObservation = None,
+    previous_observation: GameObservation | None = None,
     agent: Agent | None = None,
 ) -> float:
     """
-    Extended version of the enhanced reward function that includes the new reward components.
+    Extended version of the enhanced reward function that includes the new reward components
+    and normalizes rewards by game length.
 
     Args:
         events: List of events from the current step
@@ -576,20 +583,22 @@ def _enhanced_reward(
         agent: The agent object for tracking history
 
     Returns:
-        float: Total enhanced reward including new components
+        float: Total enhanced reward including new components, normalized by game length
     """
-
     # Get the base reward from the original function
     reward = _basic_reward(events, observation, previous_observation)
-    reward += calculate_tactical_reward(
+    reward += winning_reward(observation)
+    other_reward = 0
+    other_reward += calculate_tactical_reward(
         events,
         observation,
         previous_observation,
     )
-    reward += calculate_strategic_reward(observation, previous_observation)
+    other_reward += calculate_strategic_reward(
+        observation,
+        previous_observation,
+    )
     if agent:
-        reward += calculate_learning_reward(observation, agent)
+        other_reward += calculate_learning_reward(observation, agent)
 
-    reward += calculate_map_control_reward(observation, agent)
-
-    return math.tanh(reward / 10)
+    return math.tanh((reward + other_reward / 2) / 10)
