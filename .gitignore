@@ -1,7 +1,7 @@
 data/
 .DS_Store
 .ruff_cache
-models/
+ml_models/
 results/
 uv.lock
 runs/
