@@ -1,8 +1,8 @@
 python -m agentarena.training.train \
   --episodes 50000 \
-  --model-name corrected_enhanced \
+  --model-name mb_advanced \
   --save-freq 300 \
-  --reward-type basic \
+  --reward-type advanced \
   --learning-rate 0.005 \
   --gamma 0.99 \
   --epsilon 0.8 \

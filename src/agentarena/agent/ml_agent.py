@@ -14,6 +14,9 @@ from agentarena.models.action import Action, Direction
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import Experience, MLAgentConfig
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
 
 # Updated constants for state encoding
 MAX_ENEMIES = 3
@@ -294,10 +297,10 @@ class MLAgent(Agent):
             Tuple of (policy_net, target_net)
         """
         # Create policy network
-        policy_net = DuelingDQN(state_size, self.n_actions)
+        policy_net = DuelingDQN(state_size, self.n_actions).to(device)
 
         # Create target network with identical structure
-        target_net = DuelingDQN(state_size, self.n_actions)
+        target_net = DuelingDQN(state_size, self.n_actions).to(device)
 
         # Initialize target net with same weights
         target_net.load_state_dict(policy_net.state_dict())
@@ -509,7 +512,7 @@ class MLAgent(Agent):
         """
         # Convert observation to state vector
         state = self.encode_observation(observation)
-        state_tensor = torch.FloatTensor(state).unsqueeze(0)
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
 
         # Store last state for learning
         if self.is_training:
@@ -606,15 +609,19 @@ class MLAgent(Agent):
         # Convert experiences to tensors
         states = torch.FloatTensor(
             np.array([exp.state for exp in experiences]),
+        ).to(device)
+        actions = (
+            torch.LongTensor(
+                [exp.action for exp in experiences],
+            )
+            .unsqueeze(1)
+            .to(device)
         )
-        actions = torch.LongTensor(
-            [exp.action for exp in experiences],
-        ).unsqueeze(1)
-        rewards = torch.FloatTensor([exp.reward for exp in experiences])
+        rewards = torch.FloatTensor([exp.reward for exp in experiences]).to(device)
         next_states = torch.FloatTensor(
             np.array([exp.next_state for exp in experiences]),
-        )
-        dones = torch.FloatTensor([exp.done for exp in experiences])
+        ).to(device)
+        dones = torch.FloatTensor([exp.done for exp in experiences]).to(device)
 
         # Compute current Q values using policy network
         current_q_values = self.policy_net(states).gather(1, actions)
@@ -677,7 +684,7 @@ class MLAgent(Agent):
         Args:
             path: Path to load the model from
         """
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, map_location=torch.device("cpu"))
         self.state_size = checkpoint["state_size"]
         self.n_actions = checkpoint["n_actions"]
         self.epsilon = checkpoint["epsilon"]
