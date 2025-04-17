@@ -131,6 +131,7 @@ class Game:
                 self.player,
                 self.enemies,
                 self.bullets,
+                self.level.walls,
                 self.game_time,
                 self.score,
             )
@@ -141,6 +142,7 @@ class Game:
                 self.player,
                 self.enemies,
                 self.bullets,
+                self.level.walls,
                 self.game_time,
                 self.score,
             )
@@ -165,6 +167,13 @@ class Game:
                 self.game_time,
                 self.player,
             )
+            self.save_episode_log()
+            self.running = False
+            return
+
+        if len(self.enemies) == 0:
+            # All enemies defeated - victory!
+            self.score += 100  # Big score bonus for winning
             self.save_episode_log()
             self.running = False
             return

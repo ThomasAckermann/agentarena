@@ -14,21 +14,22 @@ from agentarena.models.action import Action, Direction
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import Experience, MLAgentConfig
 
-# Constants for state encoding
-MAX_ENEMIES = 3  # Match with config.max_enemies
-MAX_BULLETS = 5
-ENEMY_FEATURES = 7  # Features per enemy: rel_x, rel_y, abs_x, abs_y, distance, angle, health
-BULLET_FEATURES = 5  # Features per bullet: rel_x, rel_y, distance, direction_danger, is_enemy
-PLAYER_FEATURES = 3  # Health + absolute x,y position (normalized)
-WALL_FEATURES = 8  # Distance to nearest wall in 8 directions
 
+# Updated constants for state encoding
+MAX_ENEMIES = 3
+MAX_BULLETS = 5
+ENEMY_FEATURES = 7
+BULLET_FEATURES = 5
+PLAYER_FEATURES = 3
+MAX_WALLS = 20
+WALL_FEATURES_PER_WALL = 4  # x, y, rel_x, rel_y
 
 # Calculate expected state vector size
 STATE_SIZE = (
     PLAYER_FEATURES
     + (MAX_ENEMIES * ENEMY_FEATURES)
     + (MAX_BULLETS * BULLET_FEATURES)
-    + WALL_FEATURES
+    + (MAX_WALLS * WALL_FEATURES_PER_WALL)
 )
 
 
@@ -103,63 +104,93 @@ class ReplayMemory:
         return len(self.memory)
 
 
-class DQNModel_old(nn.Module):
-    def __init__(self, input_size: int, output_size: int) -> None:
-        super().__init__()
-        # Shared feature layers
-        self.feature_layer = nn.Sequential(
-            nn.Linear(input_size, 256),
-            nn.LeakyReLU(),
-            nn.Linear(256, 256),
-            nn.LeakyReLU(),
-        )
+class DuelingDQN(nn.Module):
+    """
+    Dueling DQN architecture with BatchNorm for improved learning stability.
+    Separates state value and action advantage calculations for better learning.
+    """
 
-        # Value stream
-        self.value_stream = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.LeakyReLU(),
-            nn.Linear(128, 1),
-        )
-
-        # Advantage stream
-        self.advantage_stream = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.LeakyReLU(),
-            nn.Linear(128, output_size),
-        )
-
-    def forward(self, x):
-        features = self.feature_layer(x)
-
-        value = self.value_stream(features)
-        advantage = self.advantage_stream(features)
-
-        # Combine value and advantage streams
-        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
-        return q_values
-
-
-class DQNModel(nn.Module):
     def __init__(
         self,
         input_size: int,
         output_size: int,
+        hidden_size: int = 512,
+        dropout_rate: float = 0.2,
     ) -> None:
-        super().__init__()
-        # Wider network
-        self.fc1 = nn.Linear(input_size, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, 64)
-        self.fc4 = nn.Linear(64, output_size)
+        """
+        Initialize the Dueling DQN network.
 
-        # Add dropout to prevent overfitting
-        self.dropout = nn.Dropout(0.2)
+        Args:
+            input_size: Size of the input state vector
+            output_size: Number of possible actions
+            hidden_size: Size of hidden layers
+            dropout_rate: Dropout probability for regularization
+        """
+        super().__init__()
+
+        # Shared feature extraction layers
+        self.feature_network = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(dropout_rate),
+            nn.Linear(hidden_size, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(dropout_rate),
+        )
+
+        # Value stream - estimates the value of the state V(s)
+        self.value_stream = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.LeakyReLU(0.1),
+            nn.Linear(hidden_size // 2, 1),
+        )
+
+        # Advantage stream - estimates the advantage of each action A(s,a)
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.LeakyReLU(0.1),
+            nn.Linear(hidden_size // 2, output_size),
+        )
+
+        # Initialize weights using xavier_uniform
+        self._initialize_weights()
+
+    def _initialize_weights(self) -> None:
+        """Initialize weights using Xavier initialization for better convergence."""
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.leaky_relu(self.fc1(x))
-        x = F.leaky_relu(self.fc2(x))
-        x = F.leaky_relu(self.fc3(x))
-        return self.fc4(x)
+        """
+        Forward pass that combines value and advantage streams.
+
+        Args:
+            x: Input state tensor
+
+        Returns:
+            Q-values for each action
+        """
+        # Extract features
+        features = self.feature_network(x)
+
+        # Calculate state value
+        value = self.value_stream(features)
+
+        # Calculate action advantages
+        advantages = self.advantage_stream(features)
+
+        # Combine value and advantages using the dueling architecture formula
+        # Q(s,a) = V(s) + (A(s,a) - 1/|A| * sum(A(s,a')))
+        q_values = value + (advantages - advantages.mean(dim=1, keepdim=True))
+
+        return q_values
 
 
 class MLAgent(Agent):
@@ -192,6 +223,8 @@ class MLAgent(Agent):
         super().__init__(name)
         self.is_training = is_training
         self.recent_actions = []
+        self.shots_fired = 0
+        self.enemy_hits = 0
 
         # Use config if provided, otherwise use default parameters
         if config:
@@ -202,6 +235,9 @@ class MLAgent(Agent):
             self.learning_rate = config.learning_rate
             self.batch_size = config.batch_size
             self.memory_capacity = config.memory_capacity
+            # Add target network update frequency (Default to 10 if not specified in config)
+            # Instead of .get(), use getattr with a default value
+            self.target_update_frequency = getattr(config, "target_update_frequency", 10)
         else:
             # Hyperparameters
             self.gamma = gamma  # Discount factor
@@ -211,6 +247,7 @@ class MLAgent(Agent):
             self.learning_rate = learning_rate  # Learning rate
             self.batch_size = 64
             self.memory_capacity = 10000
+            self.target_update_frequency = 10  # Update target network every 10 episodes
 
         # Setup the action space
         self.directions = [
@@ -230,7 +267,9 @@ class MLAgent(Agent):
 
         # State representation size (fixed size based on constants)
         self.state_size = STATE_SIZE
-        self.model = self._initialize_model(self.state_size)
+
+        # Initialize both policy and target networks
+        self.policy_net, self.target_net = self._initialize_model(self.state_size)
 
         # Experience replay
         self.memory = ReplayMemory(self.memory_capacity)
@@ -240,37 +279,49 @@ class MLAgent(Agent):
         self.last_action: int | None = None
         self.accumulated_reward = 0.0
 
-    def _initialize_model(self, state_size: int) -> DQNModel:
+        # Track steps and episodes for target network updates
+        self.steps_done = 0
+        self.episodes_done = 0
+
+    def _initialize_model(self, state_size: int) -> tuple[DuelingDQN, DuelingDQN]:
         """
-        Initialize the neural network model.
+        Initialize both policy and target networks.
 
         Args:
             state_size: Input dimension size
 
         Returns:
-            Initialized DQN model
+            Tuple of (policy_net, target_net)
         """
-        model = DQNModel(
-            state_size,
-            self.n_actions,
-        )
-        self.optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
+        # Create policy network
+        policy_net = DuelingDQN(state_size, self.n_actions)
+
+        # Create target network with identical structure
+        target_net = DuelingDQN(state_size, self.n_actions)
+
+        # Initialize target net with same weights
+        target_net.load_state_dict(policy_net.state_dict())
+
+        # Set target network to evaluation mode (affects batchnorm/dropout)
+        target_net.eval()
+
+        # Setup optimizer only for policy network
+        self.optimizer = optim.Adam(policy_net.parameters(), lr=self.learning_rate)
         self.scheduler = optim.lr_scheduler.StepLR(
             self.optimizer,
             step_size=1000,
-            gamma=0.995,
+            gamma=0.9995,
         )
-        return model
+
+        return policy_net, target_net
 
     def reset(self) -> None:
         """Reset the agent state at the beginning of an episode."""
         self.last_state = None
         self.last_action = None
         self.accumulated_reward = 0.0
-
-        # Decay epsilon
-        if self.is_training and self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+        self.shots_fired = 0
+        self.enemy_hits = 0
 
     def encode_observation(self, observation: GameObservation) -> np.ndarray:
         """Enhanced state encoding with walls and absolute position."""
@@ -346,48 +397,72 @@ class MLAgent(Agent):
             padding = [0] * (expected_bullet_features - len(bullet_features))
             bullet_features.extend(padding)
 
-        # NEW: Calculate distances to walls in 8 directions
-        # Note: This would require access to the level's wall data
-        # For now, I'll use screen boundaries as a proxy for walls
         wall_features = []
 
-        # Distances to screen edges (normalized to [0,1])
-        dist_left = player_x / 1200.0
-        dist_right = (1200.0 - player_x) / 1200.0
-        dist_up = player_y / 900.0
-        dist_down = (900.0 - player_y) / 900.0
+        # Check if we have access to wall data
+        if hasattr(observation, "walls") and observation.walls:
+            # Process up to a maximum number of walls (e.g., 20)
+            max_walls = 20
+            for i, wall in enumerate(observation.walls[:max_walls]):
+                # Normalize wall coordinates to [0,1] range
+                norm_wall_x = wall.x / 1200.0
+                norm_wall_y = wall.y / 900.0
 
-        # Diagonal distances (approximate)
-        dist_up_left = min(dist_left, dist_up)
-        dist_up_right = min(dist_right, dist_up)
-        dist_down_left = min(dist_left, dist_down)
-        dist_down_right = min(dist_right, dist_down)
+                # Calculate relative position to player
+                rel_wall_x = (wall.x - player_x) / 1200.0
+                rel_wall_y = (wall.y - player_y) / 900.0
 
-        wall_features = [
-            dist_left,
-            dist_right,
-            dist_up,
-            dist_down,
-            dist_up_left,
-            dist_up_right,
-            dist_down_left,
-            dist_down_right,
-        ]
+                # Add features for this wall
+                wall_features.extend([norm_wall_x, norm_wall_y, rel_wall_x, rel_wall_y])
 
-        # For a more accurate implementation, you'd use raycasting to find
-        # actual distances to walls in each direction
+            # Pad if we have fewer than max_walls
+            padding_needed = max_walls - len(observation.walls[:max_walls])
+            if padding_needed > 0:
+                wall_features.extend([0.0] * (padding_needed * 4))
+        else:
+            # Fallback to simpler wall distance representation if wall data isn't available
+            # (keep your existing 8 distance measurements)
+            # Distances to screen edges (normalized to [0,1])
+            dist_left = player_x / 1200.0
+            dist_right = (1200.0 - player_x) / 1200.0
+            dist_up = player_y / 900.0
+            dist_down = (900.0 - player_y) / 900.0
 
-        # Combine all features
+            # Diagonal distances (approximate)
+            dist_up_left = min(dist_left, dist_up)
+            dist_up_right = min(dist_right, dist_up)
+            dist_down_left = min(dist_left, dist_down)
+            dist_down_right = min(dist_right, dist_down)
+
+            wall_features = [
+                dist_left,
+                dist_right,
+                dist_up,
+                dist_down,
+                dist_up_left,
+                dist_up_right,
+                dist_down_left,
+                dist_down_right,
+            ]
+
+        # Combine all features and adjust STATE_SIZE constant accordingly
         state = (
             [player_health / 3.0, norm_x, norm_y] + enemy_features + bullet_features + wall_features
         )
 
-        # Ensure we always have the correct state size
-        assert (
-            len(state) == self.state_size
-        ), f"State size mismatch: got {len(state)}, expected {self.state_size}"
+        # Update assertion for debugging
+        expected_size = (
+            PLAYER_FEATURES
+            + (MAX_ENEMIES * ENEMY_FEATURES)
+            + (MAX_BULLETS * BULLET_FEATURES)
+            + len(wall_features)
+        )
 
-        return np.tanh(np.array(state, dtype=np.float32))
+        assert (
+            len(state) == expected_size
+        ), f"State size mismatch: got {len(state)}, expected {expected_size}"
+
+        return np.array(state, dtype=np.float32)
 
     def _action_to_game_action(self, action_idx: int) -> Action:
         """
@@ -440,6 +515,10 @@ class MLAgent(Agent):
         if self.is_training:
             self.last_state = state
 
+        # Set networks to evaluation mode for inference
+        training_mode = self.policy_net.training
+        self.policy_net.eval()
+
         # Epsilon-greedy action selection
         if self.is_training and random.random() < self.epsilon:
             # Explore: select a random action
@@ -447,15 +526,18 @@ class MLAgent(Agent):
         else:
             # Exploit: select the action with highest predicted Q-value
             with torch.no_grad():
-                q_values = self.model(state_tensor)
+                q_values = self.policy_net(state_tensor)  # Use policy_net instead of model
                 action_idx = q_values.max(1)[1].item()
 
         # Convert to game action
         action = self._action_to_game_action(action_idx)
+        if action.is_shooting:
+            self.shots_fired += 1
 
         # Store the selected action for learning
         if self.is_training:
             self.last_action = action_idx
+
         # Every 1000 calls, debug Q-values
         if hasattr(self, "get_action_count"):
             self.get_action_count += 1
@@ -464,15 +546,20 @@ class MLAgent(Agent):
 
         if self.get_action_count % 1000 == 0:
             with torch.no_grad():
-                q_values = self.model(state_tensor).cpu().numpy()[0]
+                self.policy_net.eval()  # Ensure in eval mode for debugging
+                q_values = self.policy_net(state_tensor).cpu().numpy()[0]
 
                 top_actions = np.argsort(q_values)[-3:][::-1]
                 for action_idx in top_actions:
                     action = self._action_to_game_action(action_idx)
+
         if self.is_training:
             self.recent_actions.append(action_idx)
             if len(self.recent_actions) > 100:
                 self.recent_actions.pop(0)
+
+        # Restore original training mode
+        self.policy_net.train(training_mode)
 
         return action
 
@@ -487,6 +574,7 @@ class MLAgent(Agent):
         """
         if not self.is_training or self.last_state is None or self.last_action is None:
             return
+
         if len(self.recent_actions) > 20:  # Need enough history
             # Count action frequencies
             action_counts = {}
@@ -504,6 +592,9 @@ class MLAgent(Agent):
 
         # Update last state
         self.last_state = next_state
+
+        # Increment step counter
+        self.steps_done += 1
 
         # Only train if we have enough samples
         if len(self.memory) < self.batch_size:
@@ -523,18 +614,21 @@ class MLAgent(Agent):
         next_states = torch.FloatTensor(
             np.array([exp.next_state for exp in experiences]),
         )
-
         dones = torch.FloatTensor([exp.done for exp in experiences])
 
-        # Compute current Q values
-        current_q_values = self.model(states).gather(1, actions)
+        # Compute current Q values using policy network
+        current_q_values = self.policy_net(states).gather(1, actions)
 
-        # Compute next Q values (for DQN)
+        # ----- Double DQN Implementation -----
+        # 1. Get actions that would be chosen by policy_net for next states
         with torch.no_grad():
-            next_q_values = self.model(next_states).max(1)[0]
+            next_action_indices = self.policy_net(next_states).max(1)[1].unsqueeze(1)
 
-        # Compute target Q values
-        target_q_values = torch.tanh(rewards + (1 - dones) * self.gamma * next_q_values)
+            # 2. Evaluate those actions using target_net
+            next_q_values = self.target_net(next_states).gather(1, next_action_indices).squeeze()
+
+        # Compute target Q values (without tanh constraint)
+        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
 
         # Compute loss
         loss = F.smooth_l1_loss(current_q_values.squeeze(), target_q_values)
@@ -542,9 +636,20 @@ class MLAgent(Agent):
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
         self.optimizer.step()
         self.scheduler.step()
+
+        if done:  # Update at the end of episodes
+            self.episodes_done += 1
+
+            # Decay epsilon at the end of each episode
+            if self.epsilon > self.epsilon_min:
+                self.epsilon *= self.epsilon_decay
+
+            # Update target network periodically
+            if self.episodes_done % self.target_update_frequency == 0:
+                self.target_net.load_state_dict(self.policy_net.state_dict())
 
     def save_model(self, path: str) -> None:
         """
@@ -553,16 +658,17 @@ class MLAgent(Agent):
         Args:
             path: Path to save the model to
         """
-        if self.model is not None:
-            torch.save(
-                {
-                    "model_state_dict": self.model.state_dict(),
-                    "state_size": self.state_size,
-                    "n_actions": self.n_actions,
-                    "epsilon": self.epsilon,
-                },
-                path,
-            )
+        torch.save(
+            {
+                "policy_net_state_dict": self.policy_net.state_dict(),
+                "target_net_state_dict": self.target_net.state_dict(),
+                "state_size": self.state_size,
+                "n_actions": self.n_actions,
+                "epsilon": self.epsilon,
+                "episodes_done": self.episodes_done,
+            },
+            path,
+        )
 
     def load_model(self, path: str) -> None:
         """
@@ -576,7 +682,55 @@ class MLAgent(Agent):
         self.n_actions = checkpoint["n_actions"]
         self.epsilon = checkpoint["epsilon"]
 
-        self.model = self._initialize_model(self.state_size)
+        # Initialize models
+        self.policy_net, self.target_net = self._initialize_model(self.state_size)
 
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.model.eval()
+        # Check if we're loading an older model without separate networks
+        if "policy_net_state_dict" in checkpoint:
+            # New format with separate networks
+            self.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
+            self.target_net.load_state_dict(checkpoint["target_net_state_dict"])
+        else:
+            # Old format with single model
+            self.policy_net.load_state_dict(checkpoint["model_state_dict"])
+            self.target_net.load_state_dict(checkpoint["model_state_dict"])
+
+        # Load episode counter if available
+        if "episodes_done" in checkpoint:
+            self.episodes_done = checkpoint["episodes_done"]
+
+        # Set models to evaluation mode for inference
+        if not self.is_training:
+            self.policy_net.eval()
+            self.target_net.eval()
+
+    def load_model_weights_only(self, path: str) -> None:
+        """
+        Load only the model weights from a checkpoint, not the hyperparameters.
+
+        Args:
+            path: Path to load the model from
+        """
+        checkpoint = torch.load(path)
+
+        # Initialize models with current hyperparameters
+        self.policy_net, self.target_net = self._initialize_model(self.state_size)
+
+        # Check if we're loading an older model without separate networks
+        if "policy_net_state_dict" in checkpoint:
+            # New format with separate networks
+            self.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
+            self.target_net.load_state_dict(checkpoint["target_net_state_dict"])
+        else:
+            # Old format with single model
+            self.policy_net.load_state_dict(checkpoint["model_state_dict"])
+            self.target_net.load_state_dict(checkpoint["model_state_dict"])
+
+        # Important: DON'T load epsilon, gamma, lr, etc.
+        # We'll keep the values that were passed to the constructor
+
+        print(f"Loaded model weights only. Using current hyperparameters:")
+        print(f"  - Learning rate: {self.learning_rate}")
+        print(f"  - Gamma: {self.gamma}")
+        print(f"  - Epsilon: {self.epsilon}")
+        print(f"  - Epsilon decay: {self.epsilon_decay}")

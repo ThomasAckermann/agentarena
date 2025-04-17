@@ -23,6 +23,7 @@ from agentarena.models.observations import (
     EnemyObservation,
     GameObservation,
     PlayerObservation,
+    WallObservation,
 )
 
 
@@ -237,6 +238,7 @@ class ObjectFactory:
         player: Player,
         enemies: list[Player],
         bullets: list[Projectile],
+        walls: list[Wall],
         game_time: float,
         score: int,
     ) -> GameObservation:
@@ -281,6 +283,13 @@ class ObjectFactory:
                 )
                 for bullet in bullets
             ],
+            walls=[
+                WallObservation(
+                    x=wall.x if not None else 0,
+                    y=wall.y if not None else 0,
+                )
+                for wall in walls
+            ],
             game_time=game_time,
             score=score,
         )
@@ -291,6 +300,7 @@ class ObjectFactory:
         player: Player,
         enemies: list[Player],
         bullets: list[Projectile],
+        walls: list[Wall],
         game_time: float,
         score: int,
     ) -> GameObservation:
@@ -348,6 +358,13 @@ class ObjectFactory:
                         owner=bullet.owner,
                     )
                     for bullet in bullets
+                ],
+                walls=[
+                    WallObservation(
+                        x=wall.x if not None else 0,
+                        y=wall.y if not None else 0,
+                    )
+                    for wall in walls
                 ],
                 game_time=game_time,
                 score=score,
