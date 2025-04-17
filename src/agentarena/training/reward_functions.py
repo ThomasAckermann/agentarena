@@ -241,7 +241,7 @@ def _advanced_reward(
             reward += 0.5
 
     # Small penalty for each step to encourage faster completion
-    reward -= 0.01
+    reward -= 0.1
 
     # If we have previous observation, we can calculate more rewards
     if previous_observation:
@@ -296,7 +296,7 @@ def _advanced_reward(
         bullet_danger = len(observation.bullets_near_player())
         reward -= 0.1 * bullet_danger
 
-    return reward
+    return math.tanh(reward)
 
 
 def calculate_tactical_reward(
