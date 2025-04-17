@@ -24,7 +24,7 @@ MAX_BULLETS = 5
 ENEMY_FEATURES = 7
 BULLET_FEATURES = 5
 PLAYER_FEATURES = 3
-MAX_WALLS = 20
+MAX_WALLS = 120
 WALL_FEATURES_PER_WALL = 4  # x, y, rel_x, rel_y
 
 # Calculate expected state vector size
@@ -117,7 +117,7 @@ class DuelingDQN(nn.Module):
         self,
         input_size: int,
         output_size: int,
-        hidden_size: int = 512,
+        hidden_size: int = 1024,
         dropout_rate: float = 0.2,
     ) -> None:
         """
@@ -392,7 +392,15 @@ class MLAgent(Agent):
 
             is_enemy = 1 if bullet.owner != "player" else 0
 
-            bullet_features.extend([rel_x, rel_y, distance, direction_danger, is_enemy])
+            bullet_features.extend(
+                [
+                    rel_x,
+                    rel_y,
+                    distance,
+                    direction_danger,
+                    is_enemy,
+                ]
+            )
 
         # Pad bullet features if needed (existing code)
         expected_bullet_features = MAX_BULLETS * BULLET_FEATURES
@@ -405,18 +413,29 @@ class MLAgent(Agent):
         # Check if we have access to wall data
         if hasattr(observation, "walls") and observation.walls:
             # Process up to a maximum number of walls (e.g., 20)
-            max_walls = 20
-            for i, wall in enumerate(observation.walls[:max_walls]):
-                # Normalize wall coordinates to [0,1] range
-                norm_wall_x = wall.x / 1200.0
-                norm_wall_y = wall.y / 900.0
+            max_walls = len(observation.walls)
+            for i in range(MAX_WALLS):
+                if i < max_walls:
 
-                # Calculate relative position to player
-                rel_wall_x = (wall.x - player_x) / 1200.0
-                rel_wall_y = (wall.y - player_y) / 900.0
+                    # Normalize wall coordinates to [0,1] range
+                    norm_wall_x = observation.walls[i].x / 1200.0
+                    norm_wall_y = observation.walls[i].y / 900.0
 
-                # Add features for this wall
-                wall_features.extend([norm_wall_x, norm_wall_y, rel_wall_x, rel_wall_y])
+                    # Calculate relative position to player
+                    rel_wall_x = (observation.walls[i].x - player_x) / 1200.0
+                    rel_wall_y = (observation.walls[i].y - player_y) / 900.0
+
+                    # Add features for this wall
+                    wall_features.extend(
+                        [
+                            norm_wall_x,
+                            norm_wall_y,
+                            rel_wall_x,
+                            rel_wall_y,
+                        ]
+                    )
+                else:
+                    wall_features.extend([0.0, 0.0, 0.0, 0.0])
 
             # Pad if we have fewer than max_walls
             padding_needed = max_walls - len(observation.walls[:max_walls])

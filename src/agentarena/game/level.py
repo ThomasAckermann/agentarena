@@ -62,6 +62,7 @@ class Level:
         self.add_border_walls()
         self.generate_wall_clusters()
         self.ensure_playable()
+        print("number of wallls: ", len(self.walls))
 
     def add_border_walls(self) -> None:
         """Add walls around the border of the screen."""
