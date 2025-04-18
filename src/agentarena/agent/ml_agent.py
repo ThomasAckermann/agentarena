@@ -25,7 +25,7 @@ ENEMY_FEATURES = 7
 BULLET_FEATURES = 5
 PLAYER_FEATURES = 3
 MAX_WALLS = 120
-WALL_FEATURES_PER_WALL = 4  # x, y, rel_x, rel_y
+WALL_FEATURES_PER_WALL = 2  # x, y
 
 # Calculate expected state vector size
 STATE_SIZE = (
@@ -117,7 +117,7 @@ class DuelingDQN(nn.Module):
         self,
         input_size: int,
         output_size: int,
-        hidden_size: int = 1024,
+        hidden_size: int = 128,
         dropout_rate: float = 0.2,
     ) -> None:
         """
@@ -131,32 +131,41 @@ class DuelingDQN(nn.Module):
         """
         super().__init__()
 
-        # Shared feature extraction layers
         self.feature_network = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
+            nn.Linear(input_size, 256),
+            nn.BatchNorm1d(256),
             nn.LeakyReLU(0.1),
-            nn.Dropout(dropout_rate),
-            nn.Linear(hidden_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
+            nn.Linear(256, 256),
+            nn.BatchNorm1d(256),
             nn.LeakyReLU(0.1),
-            nn.Dropout(dropout_rate),
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.1),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.1),
         )
 
-        # Value stream - estimates the value of the state V(s)
+        # Value stream
         self.value_stream = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
-            nn.BatchNorm1d(hidden_size // 2),
+            nn.Linear(64, 64),
+            nn.BatchNorm1d(64),
             nn.LeakyReLU(0.1),
-            nn.Linear(hidden_size // 2, 1),
+            nn.Linear(64, 32),
+            nn.BatchNorm1d(32),
+            nn.LeakyReLU(0.1),
+            nn.Linear(32, 1),
         )
 
-        # Advantage stream - estimates the advantage of each action A(s,a)
+        # Advantage stream
         self.advantage_stream = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
-            nn.BatchNorm1d(hidden_size // 2),
+            nn.Linear(64, 64),
+            nn.BatchNorm1d(64),
             nn.LeakyReLU(0.1),
-            nn.Linear(hidden_size // 2, output_size),
+            nn.Linear(64, 32),
+            nn.BatchNorm1d(32),
+            nn.LeakyReLU(0.1),
+            nn.Linear(32, output_size),
         )
 
         # Initialize weights using xavier_uniform
@@ -410,62 +419,24 @@ class MLAgent(Agent):
 
         wall_features = []
 
-        # Check if we have access to wall data
-        if hasattr(observation, "walls") and observation.walls:
-            # Process up to a maximum number of walls (e.g., 20)
-            max_walls = len(observation.walls)
-            for i in range(MAX_WALLS):
-                if i < max_walls:
+        # Process up to a maximum number of walls (e.g., 20)
+        max_walls = len(observation.walls)
+        for i in range(MAX_WALLS):
+            if i < max_walls:
 
-                    # Normalize wall coordinates to [0,1] range
-                    norm_wall_x = observation.walls[i].x / 1200.0
-                    norm_wall_y = observation.walls[i].y / 900.0
+                # Normalize wall coordinates to [0,1] range
+                norm_wall_x = observation.walls[i].x / 1200.0
+                norm_wall_y = observation.walls[i].y / 900.0
 
-                    # Calculate relative position to player
-                    rel_wall_x = (observation.walls[i].x - player_x) / 1200.0
-                    rel_wall_y = (observation.walls[i].y - player_y) / 900.0
-
-                    # Add features for this wall
-                    wall_features.extend(
-                        [
-                            norm_wall_x,
-                            norm_wall_y,
-                            rel_wall_x,
-                            rel_wall_y,
-                        ]
-                    )
-                else:
-                    wall_features.extend([0.0, 0.0, 0.0, 0.0])
-
-            # Pad if we have fewer than max_walls
-            padding_needed = max_walls - len(observation.walls[:max_walls])
-            if padding_needed > 0:
-                wall_features.extend([0.0] * (padding_needed * 4))
-        else:
-            # Fallback to simpler wall distance representation if wall data isn't available
-            # (keep your existing 8 distance measurements)
-            # Distances to screen edges (normalized to [0,1])
-            dist_left = player_x / 1200.0
-            dist_right = (1200.0 - player_x) / 1200.0
-            dist_up = player_y / 900.0
-            dist_down = (900.0 - player_y) / 900.0
-
-            # Diagonal distances (approximate)
-            dist_up_left = min(dist_left, dist_up)
-            dist_up_right = min(dist_right, dist_up)
-            dist_down_left = min(dist_left, dist_down)
-            dist_down_right = min(dist_right, dist_down)
-
-            wall_features = [
-                dist_left,
-                dist_right,
-                dist_up,
-                dist_down,
-                dist_up_left,
-                dist_up_right,
-                dist_down_left,
-                dist_down_right,
-            ]
+                # Add features for this wall
+                wall_features.extend(
+                    [
+                        norm_wall_x,
+                        norm_wall_y,
+                    ]
+                )
+            else:
+                wall_features.extend([0.0, 0.0])
 
         # Combine all features and adjust STATE_SIZE constant accordingly
         state = (

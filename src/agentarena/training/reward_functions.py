@@ -80,14 +80,14 @@ def _basic_reward(
     # Reward for hitting enemies
     for event in events:
         if isinstance(event, EnemyHitEvent):
-            reward += 4.0
+            reward += 2.0
         elif isinstance(event, PlayerHitEvent):
-            reward -= 2.0
+            reward -= 1.0
         elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
-            reward += 5.0  # Bonus for destroying an enemy
+            reward += 4.0  # Bonus for destroying an enemy
 
     # Penalty for each step to encourage faster completion
-    reward -= 0.1
+    reward -= 0.01
 
     return reward
 
@@ -601,4 +601,4 @@ def _enhanced_reward(
     if agent:
         other_reward += calculate_learning_reward(observation, agent)
 
-    return math.tanh((reward + other_reward / 2) / 10)
+    return math.tanh((3 * reward + other_reward) / 4)
