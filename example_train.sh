@@ -3,8 +3,8 @@ python -m agentarena.training.train \
   --model-name mb_basic \
   --save-freq 300 \
   --reward-type basic \
-  --learning-rate 0.01 \
+  --learning-rate 0.001 \
   --gamma 0.99 \
-  --epsilon 0.9 \
-  --epsilon-decay 0.9995 \
+  --epsilon 0.7 \
+  --epsilon-decay 0.995 \
   --epsilon-min 0.25
