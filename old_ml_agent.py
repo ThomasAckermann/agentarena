@@ -20,7 +20,7 @@ print(f"Using device: {device}")
 
 # Updated constants for state encoding
 MAX_ENEMIES = 3
-MAX_BULLETS = 12
+MAX_BULLETS = 5
 ENEMY_FEATURES = 7
 BULLET_FEATURES = 5
 PLAYER_FEATURES = 3
@@ -35,58 +35,6 @@ STATE_SIZE = (
     + (MAX_BULLETS * BULLET_FEATURES)
     + (MAX_WALLS * WALL_FEATURES_PER_WALL)
 )
-
-
-class PrioritizedReplay:
-    """Simple prioritized experience replay that emphasizes winning transitions."""
-
-    def __init__(self, capacity=10000, winning_bonus=10.0):
-        self.capacity = capacity
-        self.memory = []
-        self.priorities = []
-        self.position = 0
-        self.winning_bonus = winning_bonus
-
-    def push(self, state, action, reward, next_state, done):
-        """Add a new experience with priority based on reward and winning."""
-        experience = Experience(
-            state=state, action=action, reward=reward, next_state=next_state, done=done
-        )
-
-        # Calculate priority (use reward + bonus for wins)
-        # Higher reward = higher priority
-        # Winning transitions (done=True and reward>0) get extra priority
-        priority = abs(reward) + 1.0  # Base priority (never zero)
-
-        # Apply winning bonus if this is a win (done and high reward)
-        if done and reward > 0:
-            priority *= self.winning_bonus
-
-        # Add to memory
-        if len(self.memory) < self.capacity:
-            self.memory.append(experience)
-            self.priorities.append(priority)
-        else:
-            self.memory[self.position] = experience
-            self.priorities[self.position] = priority
-
-        self.position = (self.position + 1) % self.capacity
-
-    def sample(self, batch_size):
-        """Sample experiences with probability proportional to priority."""
-        batch_size = min(batch_size, len(self.memory))
-
-        # Convert priorities to probabilities
-        probs = np.array(self.priorities) / sum(self.priorities)
-
-        # Sample based on priorities
-        indices = np.random.choice(len(self.memory), batch_size, p=probs)
-        samples = [self.memory[idx] for idx in indices]
-
-        return samples
-
-    def __len__(self):
-        return len(self.memory)
 
 
 class ReplayMemory:
@@ -189,15 +137,13 @@ class DuelingDQN(nn.Module):
             nn.BatchNorm1d(256),
             nn.LeakyReLU(0.1),
             nn.Linear(256, 256),
+            nn.BatchNorm1d(256),
             nn.LeakyReLU(0.1),
             nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
             nn.LeakyReLU(0.1),
             nn.Linear(128, 64),
             nn.BatchNorm1d(64),
-            nn.LeakyReLU(0.1),
-            nn.Linear(64, 64),
-            nn.LeakyReLU(0.1),
-            nn.Linear(64, 64),
             nn.LeakyReLU(0.1),
         )
 
@@ -221,6 +167,15 @@ class DuelingDQN(nn.Module):
             nn.BatchNorm1d(32),
             nn.LeakyReLU(0.1),
             nn.Linear(32, output_size),
+        )
+
+        self.wall_encoder_stream = nn.Sequential(
+            nn.Linear(TOTAL_WALL_FEATURES, 128),
+            nn.LeakyReLU(0.1),
+            nn.Linear(128, 64),
+            nn.LeakyReLU(0.1),
+            nn.Linear(64, 32),
+            nn.LeakyReLU(0.1),
         )
 
         # Initialize weights using xavier_uniform
@@ -339,7 +294,7 @@ class MLAgent(Agent):
         self.policy_net, self.target_net = self._initialize_model(self.state_size)
 
         # Experience replay
-        self.memory = PrioritizedReplay(self.memory_capacity)
+        self.memory = ReplayMemory(self.memory_capacity)
 
         # Track last state and action for learning
         self.last_state: np.ndarray | None = None
@@ -373,10 +328,7 @@ class MLAgent(Agent):
         target_net.eval()
 
         # Setup optimizer only for policy network
-        self.optimizer = optim.Adam(
-            policy_net.parameters(),
-            lr=self.learning_rate,
-        )
+        self.optimizer = optim.Adam(policy_net.parameters(), lr=self.learning_rate)
         self.scheduler = optim.lr_scheduler.StepLR(
             self.optimizer,
             step_size=1000,
@@ -638,13 +590,7 @@ class MLAgent(Agent):
         next_state = self.encode_observation(next_observation)
 
         # Store transition in replay memory
-        self.memory.push(
-            self.last_state,
-            self.last_action,
-            reward,
-            next_state,
-            done,
-        )
+        self.memory.push(self.last_state, self.last_action, reward, next_state, done)
 
         # Update last state
         self.last_state = next_state
