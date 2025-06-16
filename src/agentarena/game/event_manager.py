@@ -11,24 +11,10 @@ from agentarena.models.events import (
 
 
 class EventManager:
-    """
-    Manages the creation and handling of game events.
-    """
 
     def __init__(self) -> None:
-        """Initialize the event manager."""
 
-    def create_bullet_fired_event(self, events, game_time, owner_id, direction, position) -> None:
-        """
-        Create a bullet fired event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            owner_id: ID of the entity that fired the bullet
-            direction: Direction vector of the bullet (dx, dy)
-            position: Position of the bullet (x, y)
-        """
+    def create_bullet_fired_event(self, events, game_time, owner_id, direction, position, ) -> None:
         events.append(
             BulletFiredEvent(
                 timestamp=game_time,
@@ -38,17 +24,7 @@ class EventManager:
             ),
         )
 
-    def create_enemy_hit_event(self, events, game_time, enemy_id, x, y) -> None:
-        """
-        Create an enemy hit event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            enemy_id: ID of the enemy that was hit
-            x: X position of the hit
-            y: Y position of the hit
-        """
+    def create_enemy_hit_event(self, events, game_time, enemy_id, x, y, ) -> None:
         events.append(
             EnemyHitEvent(
                 timestamp=game_time,
@@ -58,17 +34,8 @@ class EventManager:
             ),
         )
 
-    def create_player_hit_event(self, events, game_time, bullet_owner, x, y) -> None:
-        """
-        Create a player hit event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            bullet_owner: ID of the entity that fired the bullet
-            x: X position of the hit
-            y: Y position of the hit
-        """
+    def create_player_hit_event(self, events, game_time, bullet_owner, x, y,
+                                ) -> None:
         events.append(
             PlayerHitEvent(
                 timestamp=game_time,
@@ -87,17 +54,6 @@ class EventManager:
         x,
         y,
     ) -> None:
-        """
-        Create an entity destroyed event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            entity_id: ID of the entity that was destroyed
-            entity_type: Type of the entity that was destroyed
-            x: X position of the entity
-            y: Y position of the entity
-        """
         events.append(
             EntityDestroyedEvent(
                 timestamp=game_time,
@@ -111,14 +67,6 @@ class EventManager:
         )
 
     def create_player_destroyed_event(self, events, game_time, player) -> None:
-        """
-        Create a player destroyed event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            player: Player entity that was destroyed
-        """
         events.append(
             EntityDestroyedEvent(
                 timestamp=game_time,

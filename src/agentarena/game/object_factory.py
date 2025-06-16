@@ -28,36 +28,18 @@ from agentarena.models.observations import (
 
 
 class ObjectFactory:
-    """
-    Factory for creating game objects.
-    """
 
     def __init__(self, config: GameConfig, player_agent: Agent, enemy_agent: Agent) -> None:
-        """
-        Initialize the object factory.
-
-        Args:
-            config: Game configuration
-            player_agent: Agent for the player
-            enemy_agent: Agent for enemies
-        """
         self.config = config
         self.player_agent = player_agent
         self.enemy_agent = enemy_agent
 
-        # Precomputed values
         self.bullet_width = int(self.config.block_width / 2)
         self.bullet_height = int(self.config.block_height / 2)
         self.scaled_width = int(self.config.block_width * 0.8)
         self.scaled_height = int(self.config.block_height * 0.8)
 
     def create_player(self) -> Player:
-        """
-        Create the player entity.
-
-        Returns:
-            Player: The newly created player
-        """
         player_position = [
             random.randint(
                 2 * self.config.block_width,
@@ -70,22 +52,6 @@ class ObjectFactory:
         ]
         player_orientation = [0, 1]
 
-        # Create player data model
-        player_model = PlayerModel(
-            id="player",
-            x=player_position[0],
-            y=player_position[1],
-            width=self.scaled_width,
-            height=self.scaled_height,
-            orientation=player_orientation,
-            health=3,
-            cooldown=0,
-            ammunition=3,
-            is_reloading=False,
-            speed=self.config.player_speed,
-        )
-
-        # Create player entity using the data model
         return Player(
             orientation=player_orientation,
             agent=self.player_agent,
@@ -97,15 +63,6 @@ class ObjectFactory:
         )
 
     def create_enemies(self, count: int) -> list[Player]:
-        """
-        Create enemy entities.
-
-        Args:
-            count: Number of enemies to create
-
-        Returns:
-            List of enemy entities
-        """
         enemies = []
 
         for i in range(count):
@@ -121,22 +78,6 @@ class ObjectFactory:
             ]
             enemy_orientation = [0, 1]
 
-            # Create enemy data model
-            enemy_model = PlayerModel(
-                id=f"enemy_{i}",
-                x=enemy_position[0],
-                y=enemy_position[1],
-                width=self.scaled_width,
-                height=self.scaled_height,
-                orientation=enemy_orientation,
-                health=2,  # Enemies have less health than player
-                cooldown=0,
-                ammunition=3,
-                is_reloading=False,
-                speed=self.config.player_speed,
-            )
-
-            # Create enemy entity using the data model
             enemies.append(
                 Player(
                     orientation=enemy_orientation,
@@ -152,31 +93,15 @@ class ObjectFactory:
         return enemies
 
     def create_level(self, player: Player, enemies: list[Player]) -> Level:
-        """
-        Create a game level.
-
-        Args:
-            player: Player entity
-            enemies: List of enemy entities
-
-        Returns:
-            Level: The newly created level
-        """
         return Level(player, enemies, self.config)
 
-    def create_bullet(self, x: int, y: int, direction: list[int], owner: str) -> Projectile:
-        """
-        Create a bullet entity.
-
-        Args:
-            x: X position
-            y: Y position
-            direction: Direction vector [dx, dy]
-            owner: Owner ID (player or enemy_X)
-
-        Returns:
-            Projectile: The newly created bullet
-        """
+    def create_bullet(
+        self,
+        x: int,
+        y: int,
+        direction: list[int],
+        owner: str,
+    ) -> Projectile:
         return Projectile(
             x=x,
             y=y,
@@ -187,19 +112,12 @@ class ObjectFactory:
             speed=self.config.bullet_speed,
         )
 
-    def create_explosion(self, x: float, y: float, explosion_type: str) -> Explosion:
-        """
-        Create an explosion entity.
-
-        Args:
-            x: X position
-            y: Y position
-            explosion_type: Type of explosion ("player" or "enemy")
-
-        Returns:
-            Explosion: The newly created explosion
-        """
-        # Center the explosion on the entity
+    def create_explosion(
+        self,
+        x: float,
+        y: float,
+        explosion_type: str,
+    ) -> Explosion:
         center_x = x - (self.scaled_width / 2)
         center_y = y - (self.scaled_height / 2)
 
@@ -212,15 +130,6 @@ class ObjectFactory:
         )
 
     def get_walls_data(self, walls: list[Wall]) -> list[dict]:
-        """
-        Get data models for walls.
-
-        Args:
-            walls: List of walls
-
-        Returns:
-            List of wall data dictionaries
-        """
         return [
             WallModel(
                 id=f"wall_{i}",
@@ -304,26 +213,11 @@ class ObjectFactory:
         game_time: float,
         score: int,
     ) -> GameObservation:
-        """
-        Create a game observation from an enemy's perspective.
-
-        Args:
-            agent_id: ID of the agent requesting the observation
-            player: Player entity
-            enemies: List of enemy entities
-            bullets: List of bullet entities
-            game_time: Current game time
-            score: Current score
-
-        Returns:
-            GameObservation: The game observation
-        """
         idx = int(agent_id.replace("enemy_", ""))
         if idx < len(enemies):
             enemy = enemies[idx]
 
             return GameObservation(
-                # From enemy's perspective, it is the "player"
                 player=PlayerObservation(
                     x=enemy.x if enemy.x is not None else 0,
                     y=enemy.y if enemy.y is not None else 0,
@@ -333,7 +227,6 @@ class ObjectFactory:
                     cooldown=enemy.cooldown,
                     is_reloading=enemy.is_reloading,
                 ),
-                # From enemy's perspective, the player is an "enemy"
                 enemies=(
                     [
                         EnemyObservation(
@@ -370,7 +263,6 @@ class ObjectFactory:
                 score=score,
             )
 
-        # Fallback empty observation
         return GameObservation(
             player=PlayerObservation(
                 x=0,
@@ -385,16 +277,6 @@ class ObjectFactory:
         )
 
     def create_bullet_fired_event(self, events, game_time, owner_id, direction, position) -> None:
-        """
-        Create a bullet fired event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            owner_id: ID of the entity that fired the bullet
-            direction: Direction vector of the bullet (dx, dy)
-            position: Position of the bullet (x, y)
-        """
         events.append(
             BulletFiredEvent(
                 timestamp=game_time,
@@ -405,16 +287,6 @@ class ObjectFactory:
         )
 
     def create_enemy_hit_event(self, events, game_time, enemy_id, x, y) -> None:
-        """
-        Create an enemy hit event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            enemy_id: ID of the enemy that was hit
-            x: X position of the hit
-            y: Y position of the hit
-        """
         events.append(
             EnemyHitEvent(
                 timestamp=game_time,
@@ -425,16 +297,6 @@ class ObjectFactory:
         )
 
     def create_player_hit_event(self, events, game_time, bullet_owner, x, y) -> None:
-        """
-        Create a player hit event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            bullet_owner: ID of the entity that fired the bullet
-            x: X position of the hit
-            y: Y position of the hit
-        """
         events.append(
             PlayerHitEvent(
                 timestamp=game_time,
@@ -453,17 +315,6 @@ class ObjectFactory:
         x,
         y,
     ) -> None:
-        """
-        Create an entity destroyed event and add it to the events list.
-
-        Args:
-            events: List to append the event to
-            game_time: Current game time
-            entity_id: ID of the entity that was destroyed
-            entity_type: Type of the entity that was destroyed
-            x: X position of the entity
-            y: Y position of the entity
-        """
         events.append(
             EntityDestroyedEvent(
                 timestamp=game_time,

@@ -3,12 +3,11 @@ Main game class and core game loop for AgentArena.
 """
 
 import uuid
-from datetime import datetime
-from pathlib import Path
 
 import pygame
 
 from agentarena.agent.agent import Agent
+from agentarena.agent.manual_agent import ManualAgent
 from agentarena.game.asset_manager import AssetManager
 from agentarena.game.event_manager import EventManager
 from agentarena.game.object_factory import ObjectFactory
@@ -16,6 +15,7 @@ from agentarena.game.physics import PhysicsSystem
 from agentarena.game.rendering import RenderingSystem
 from agentarena.models.config import GameConfig
 from agentarena.models.observations import GameObservation
+from agentarena.training.demo_collection import DemonstrationLogger
 
 LOG_PATH: str = "src/agentarena/data"
 
@@ -41,6 +41,7 @@ class Game:
             clock: Pygame clock for timing
             config: Game configuration
         """
+
         self.screen: pygame.Surface = screen
         self.player_agent: Agent = player_agent
         self.enemy_agent: Agent = enemy_agent
@@ -60,20 +61,22 @@ class Game:
         self.bullets = []
         self.explosions = []
 
-        # Unique game ID for this session
         self.game_id = str(uuid.uuid4())
 
-        # Initialize systems
         self.asset_manager = AssetManager(self.config)
         self.object_factory = ObjectFactory(self.config, self.player_agent, self.enemy_agent)
         self.physics_system = PhysicsSystem(self.config)
         self.event_manager = EventManager()
 
-        # The rendering system needs to be initialized last since it depends on assets
         if self.screen is not None:
             self.rendering_system = RenderingSystem(self.screen, self.asset_manager, self.config)
         else:
             self.rendering_system = None
+        self.demo_logger = None
+        if isinstance(self.player_agent, ManualAgent):
+            self.demo_logger = DemonstrationLogger()
+            print("🎮 Demonstration collection mode activated!")
+            print("Your gameplay will be recorded for AI training.")
 
         # Initialize the game
         self.reset()
@@ -114,6 +117,9 @@ class Game:
         # Store static map data for logging
         walls_data = self.object_factory.get_walls_data(self.level.walls)
         self.static_map_data = {"walls": walls_data}
+        if self.demo_logger:
+            self.demo_logger.start_episode()
+            print("📝 Started recording new demonstration episode...")
 
     def get_observation(self, agent_id: str = "player") -> GameObservation:
         """
@@ -167,14 +173,12 @@ class Game:
                 self.game_time,
                 self.player,
             )
-            self.save_episode_log()
             self.running = False
             return
 
         if len(self.enemies) == 0:
             # All enemies defeated - victory!
             self.score += 100  # Big score bonus for winning
-            self.save_episode_log()
             self.running = False
             return
 
@@ -183,6 +187,8 @@ class Game:
             # Get player observation and action
             player_observation = self.get_observation("player")
             player_action = self.player.agent.get_action(player_observation)
+            if self.demo_logger:
+                self.demo_logger.log_step(player_observation, player_action)
             self.physics_system.apply_action(
                 "player",
                 self.player,
@@ -269,6 +275,11 @@ class Game:
                 self.game_time,
             )
 
+        if not self.running and self.demo_logger:
+            won = len(self.enemies) == 0  # Win condition
+            self.demo_logger.end_episode(won=won, score=self.score)
+            print(f"📋 Demonstration episode saved! Win: {won}, Score: {self.score}")
+
     def score_callback(self, points: int) -> None:
         """Callback to update the score."""
         self.score += points
@@ -284,22 +295,6 @@ class Game:
                 self.explosions.pop(i)
             else:
                 i += 1
-
-    def save_episode_log(self) -> None:
-        """Save the episode log to a JSON file, filtering out non-serializable objects."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = Path(LOG_PATH)
-        log_path.mkdir(exist_ok=True, parents=True)
-
-        filename = log_path / f"episode_{timestamp}.json"
-
-        # Create a sanitized copy of the episode log
-        sanitized_log = self._sanitize_for_json(self.episode_log)
-
-        with filename.open("w") as f:
-            import json
-
-            json.dump(sanitized_log, f)
 
     def _sanitize_for_json(self, data):
         """Recursively remove pygame.Rect and other non-serializable objects from data structure."""

@@ -6,6 +6,7 @@ results/
 uv.lock
 runs/
 .DS_STORE
+*.log
 
 
 # Byte-compiled / optimized / DLL files
