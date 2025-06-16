@@ -24,32 +24,19 @@ from agentarena.training.reward_functions import RewardType, calculate_reward
 
 def train(
     config: TrainingConfig,
+    pretrained_model_path: str = None,
 ) -> MLAgent | None:
-    """
-    Train the ML agent according to the provided configuration.
-
-    Args:
-        config: Training configuration parameters
-
-    Returns:
-        Trained ML agent or None if training was interrupted
-    """
     print(
         f"Starting ML agent training with {config.reward_type.value} reward function...",
     )
+    if pretrained_model_path:
+        print(f"Using pre-trained model: {pretrained_model_path}")
 
-    # Initialize pygame if needed for rendering
     if config.render:
         pygame.init()
-
-    # Load game configuration
     game_config = load_config()
-
-    # Set to headless mode if not rendering
     if not config.render:
         game_config.headless = True
-
-    # Adjust for faster training
     if not config.render:
         game_config.fps = 0  # Uncapped FPS for headless mode
 
@@ -72,6 +59,27 @@ def train(
         config=config.ml_config,
     )
     enemy_agent = RandomAgent()
+    if pretrained_model_path and Path(pretrained_model_path).exists():
+        print(f"Loading pre-trained model from {pretrained_model_path}")
+        try:
+            checkpoint = torch.load(pretrained_model_path, map_location=torch.device("cpu"))
+            if "policy_net_state_dict" in checkpoint:
+                # New format with separate networks
+                player_agent.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
+                player_agent.target_net.load_state_dict(checkpoint["policy_net_state_dict"])
+                print("✅ Pre-trained weights loaded successfully!")
+
+                # Optionally reduce initial epsilon since we start with good policy
+                player_agent.epsilon = min(player_agent.epsilon, 0.3)
+                print(f"Reduced initial epsilon to {player_agent.epsilon} for pre-trained model")
+            else:
+                print("⚠️  Warning: Pre-trained model format not recognized")
+        except Exception as e:
+            print(f"❌ Error loading pre-trained model: {e}")
+            print("Continuing with random initialization...")
+    elif pretrained_model_path:
+        print(f"⚠️  Pre-trained model file not found: {pretrained_model_path}")
+        print("Continuing with random initialization...")
 
     # Load checkpoint if provided
     if config.checkpoint_path and config.checkpoint_path.exists():
@@ -502,6 +510,9 @@ if __name__ == "__main__":
         help="Mode to run in",
     )
     parser.add_argument(
+        "--pretrained-model", help="Path to pre-trained model file (from demonstration learning)"
+    )
+    parser.add_argument(
         "--model-name",
         default="ml_agent",
         help="Name prefix for the saved model",
@@ -565,7 +576,6 @@ if __name__ == "__main__":
     reward_type = RewardType(args.reward_type)
 
     if args.mode == "train":
-        # Create ML agent config
         ml_config = MLAgentConfig(
             learning_rate=args.learning_rate,
             gamma=args.gamma,
@@ -574,7 +584,6 @@ if __name__ == "__main__":
             epsilon_decay=args.epsilon_decay,
         )
 
-        # Create training config
         training_config = TrainingConfig(
             model_name=args.model_name,
             episodes=args.episodes,
@@ -585,8 +594,7 @@ if __name__ == "__main__":
             ml_config=ml_config,
         )
 
-        # Train the agent
-        train(config=training_config)
+        train(config=training_config, pretrained_model_path=args.pretrained_model)
     else:  # evaluate
         if not args.model_path:
             parser.error("--model-path is required for evaluation mode")
