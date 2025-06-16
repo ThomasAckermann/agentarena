@@ -3,12 +3,11 @@ Main game class and core game loop for AgentArena.
 """
 
 import uuid
-from datetime import datetime
-from pathlib import Path
 
 import pygame
 
 from agentarena.agent.agent import Agent
+from agentarena.agent.manual_agent import ManualAgent
 from agentarena.game.asset_manager import AssetManager
 from agentarena.game.event_manager import EventManager
 from agentarena.game.object_factory import ObjectFactory
@@ -17,7 +16,6 @@ from agentarena.game.rendering import RenderingSystem
 from agentarena.models.config import GameConfig
 from agentarena.models.observations import GameObservation
 from agentarena.training.demo_collection import DemonstrationLogger
-from agentarena.agent.manual_agent import ManualAgent
 
 LOG_PATH: str = "src/agentarena/data"
 
