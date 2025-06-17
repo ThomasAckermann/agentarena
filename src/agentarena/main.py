@@ -1,4 +1,5 @@
 import argparse
+from argparse import Namespace
 from pathlib import Path
 
 import pygame
@@ -7,11 +8,10 @@ from agentarena.agent.manual_agent import ManualAgent
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.game.game import Game
-from agentarena.models.config import load_config
+from agentarena.models.config import load_config, GameConfig
 
 
-def main() -> None:
-    # Parse command-line arguments
+def parse_arguments() -> Namespace:
     parser = argparse.ArgumentParser(
         description="AgentArena - A 2D shooting game with configurable AI agents",
     )
@@ -33,24 +33,20 @@ def main() -> None:
         help="Path to ML model file (required if using ML agent)",
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # Initialize pygame
+
+def main() -> None:
+    args = parse_arguments()
     pygame.init()
-
-    # Load configuration
     config = load_config()
-
-    # Create display
     screen = pygame.display.set_mode(
         (config.display_width, config.display_height),
     )
     pygame.display.set_caption("AgentArena")
 
-    # Create clock
     clock = pygame.time.Clock()
 
-    # Create player agent based on arguments
     if args.player == "manual":
         player_agent = ManualAgent()
     elif args.player == "random":
@@ -84,10 +80,14 @@ def main() -> None:
         enemy_agent = MLAgent(name="MLEnemy", is_training=False)
         enemy_agent.load_model(args.ml_model)
 
-    # Initialize game
     game = Game(screen, player_agent, enemy_agent, clock, config)
 
-    # Main game loop
+    game_loop(game, clock, config)
+
+    pygame.quit()
+
+
+def game_loop(game: Game, clock: pygame.time.Clock, config: GameConfig) -> None:
     while game.running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -95,9 +95,6 @@ def main() -> None:
 
         game.update()
         clock.tick(config.fps)
-
-    # Clean up
-    pygame.quit()
 
 
 if __name__ == "__main__":

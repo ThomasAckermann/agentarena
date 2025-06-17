@@ -1,7 +1,3 @@
-"""
-Training-related data models for AgentArena.
-"""
-
 from pathlib import Path
 from typing import Any
 
@@ -10,22 +6,12 @@ from enum import Enum
 
 
 class RewardType(Enum):
-    """
-    Types of reward functions available for training.
-    """
-
     BASIC = "basic"  # Simple rewards for hits and avoiding damage
-    AGGRESSIVE = "aggressive"  # Prioritizes dealing damage over safety
-    DEFENSIVE = "defensive"  # Prioritizes staying alive over dealing damage
     ADVANCED = "advanced"  # More nuanced reward calculation with more factors
     ENHANCED = "enhanced"  # More nuanced reward calculation with more factors
 
 
 class Experience(BaseModel):
-    """
-    Represents a single experience tuple for reinforcement learning.
-    """
-
     state: Any
     action: int
     reward: float
@@ -34,10 +20,6 @@ class Experience(BaseModel):
 
 
 class EpisodeResult(BaseModel):
-    """
-    Detailed results from a single training episode.
-    """
-
     episode_id: int
     total_reward: float
     episode_length: int

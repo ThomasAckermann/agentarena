@@ -1,7 +1,3 @@
-"""
-Reward functions for reinforcement learning in AgentArena.
-"""
-
 import math
 
 from agentarena.agent.agent import Agent
@@ -15,7 +11,6 @@ from agentarena.models.events import (
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import RewardType
 
-# Constants for reward calculations
 NEARBY_DISTANCE_THRESHOLD = 300.0  # Distance threshold for considering enemies "nearby"
 BULLET_DODGE_DISTANCE = 100.0  # Distance threshold for bullet dodging detection
 
@@ -26,24 +21,8 @@ def calculate_reward(
     previous_observation: GameObservation | None = None,
     reward_type: RewardType = RewardType.BASIC,
 ) -> float:
-    """
-    Calculate rewards based on game events and observations.
-
-    Args:
-        events: List of events that occurred during the step
-        observation: Current game state observation
-        previous_observation: Previous game state observation (optional)
-        reward_type: Type of reward function to use
-
-    Returns:
-        float: The calculated reward
-    """
     if reward_type == RewardType.BASIC:
         return _basic_reward(events, observation, previous_observation)
-    elif reward_type == RewardType.AGGRESSIVE:
-        return _aggressive_reward(events, observation, previous_observation)
-    elif reward_type == RewardType.DEFENSIVE:
-        return _defensive_reward(events, observation, previous_observation)
     elif reward_type == RewardType.ADVANCED:
         return _advanced_reward(events, observation, previous_observation)
     elif reward_type == RewardType.ENHANCED:
@@ -91,116 +70,11 @@ def _basic_reward(
     return reward
 
 
-def _aggressive_reward(
-    events: list[GameEvent],
-    observation: GameObservation,
-    previous_observation: GameObservation | None = None,
-) -> float:
-    """
-    Reward function that encourages aggressive play.
-
-    Args:
-        events: Game events from the current step
-        observation: Current game state
-        previous_observation: Previous game state
-
-    Returns:
-        float: The calculated reward
-    """
-    reward = 0.0
-
-    # Large reward for hitting enemies
-    for event in events:
-        if isinstance(event, EnemyHitEvent):
-            reward += 2.0
-        elif isinstance(event, PlayerHitEvent):
-            reward -= 0.5  # Smaller penalty for getting hit
-        elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
-            reward += 5.0  # Large bonus for destroying an enemy
-        elif isinstance(event, BulletFiredEvent) and event.owner_id == "player":
-            reward += 0.1  # Small reward for shooting
-
-    # Reward for being close to enemies (encouraging engagement)
-    if nearest_enemy := observation.nearest_enemy():
-        enemy, distance = nearest_enemy
-        # More reward for being closer to enemies
-        reward += max(0, (500.0 - distance) / 500.0) * 0.1
-
-    # Small penalty for each step to encourage faster completion
-    reward -= 0.01
-
-    return reward
-
-
-def _defensive_reward(
-    events: list[GameEvent],
-    observation: GameObservation,
-    previous_observation: GameObservation | None = None,
-) -> float:
-    """
-    Reward function that encourages defensive play.
-
-    Args:
-        events: Game events from the current step
-        observation: Current game state
-        previous_observation: Previous game state
-
-    Returns:
-        float: The calculated reward
-    """
-    reward = 0.0
-
-    # Moderate reward for hitting enemies
-    for event in events:
-        if isinstance(event, EnemyHitEvent):
-            reward += 0.5
-        elif isinstance(event, PlayerHitEvent):
-            reward -= 2.0  # Larger penalty for getting hit
-        elif isinstance(event, EntityDestroyedEvent):
-            if event.is_enemy_destroyed():
-                reward += 1.0  # Bonus for destroying an enemy
-            elif event.is_player_destroyed():
-                reward -= 5.0  # Large penalty for dying
-
-    # Reward for staying alive
-    reward += 0.02
-
-    # Reward for maintaining distance from enemies
-    if (
-        previous_observation
-        and observation.nearest_enemy()
-        and previous_observation.nearest_enemy()
-    ):
-        prev_distance = previous_observation.nearest_enemy()[1]
-        curr_distance = observation.nearest_enemy()[1]
-
-        # If there are enemies nearby and the player moved away from them
-        if prev_distance < NEARBY_DISTANCE_THRESHOLD and curr_distance > prev_distance:
-            reward += 0.05
-
-    # Reward for avoiding bullets
-    if len(observation.bullets_near_player()) == 0:
-        reward += 0.05  # Small reward for having no bullets nearby
-
-    return reward
-
-
 def _advanced_reward(
     events: list[GameEvent],
     observation: GameObservation,
     previous_observation: GameObservation | None = None,
 ) -> float:
-    """
-    Advanced reward function with multiple components.
-
-    Args:
-        events: Game events from the current step
-        observation: Current game state
-        previous_observation: Previous game state
-
-    Returns:
-        float: The calculated reward
-    """
     reward = 0.0
 
     # Event-based rewards
@@ -362,14 +236,10 @@ def calculate_tactical_reward(
                 if to_player_mag > 0:
                     to_player = [v / to_player_mag for v in to_player]
 
-                # Dot product to determine if bullet is coming toward player
                 dot_product = bullet_dir[0] * to_player[0] + bullet_dir[1] * to_player[1]
-
-                # If bullet is heading toward player (dot product > 0)
                 if dot_product > 0:
                     danger_level += dot_product * (1 - (distance / 150))
 
-    # If there were bullets nearby in previous state but fewer now, agent dodged successfully
     if previous_observation and hasattr(previous_observation, "bullets_near_player"):
         if bullets_near_player < len(previous_observation.bullets_near_player()):
             reward += 0.3 * (len(previous_observation.bullets_near_player()) - bullets_near_player)
@@ -381,7 +251,6 @@ def calculate_tactical_reward(
 
 
 def calculate_strategic_reward(observation, previous_observation):
-    """Reward strategic positioning and planning"""
     reward = 0
 
     # Reward for maintaining line of sight to multiple enemies
@@ -415,45 +284,33 @@ def calculate_strategic_reward(observation, previous_observation):
 
 
 def calculate_learning_reward(observation, agent):
-    """Reward exploration and diverse behaviors"""
     reward = 0
 
-    # Encourage action diversity
     if not hasattr(agent, "action_history"):
         agent.action_history = []
 
-    # Get the current action
     current_action = agent.last_action
 
-    # Calculate action diversity score
     if len(agent.action_history) > 20:
-        # Count recent actions
         action_counts = {}
         for a in agent.action_history[-20:]:
             action_counts[a] = action_counts.get(a, 0) + 1
 
-        # Calculate entropy of action distribution
         total = len(agent.action_history[-20:])
         entropy = 0
         for count in action_counts.values():
             prob = count / total
             entropy -= prob * math.log(prob)
 
-        # Normalize to [0, 1] range - maximum entropy for uniform distribution
-        # of n actions is log(n)
         max_entropy = math.log(len(action_counts))
         if max_entropy > 0:
             normalized_entropy = entropy / max_entropy
 
-            # Reward high entropy (diverse actions)
             reward += normalized_entropy * 0.3
 
-            # Even higher reward if current action is rarely used
             current_action_freq = action_counts.get(current_action, 0) / total
-            if current_action_freq > 0.8:  # Rarely used action
+            if current_action_freq > 0.8:
                 reward -= 0.5
-
-    # Update action history
     agent.action_history.append(current_action)
     if len(agent.action_history) > 100:
         agent.action_history.pop(0)
@@ -462,99 +319,37 @@ def calculate_learning_reward(observation, agent):
 
 
 def calculate_map_control_reward(observation: GameObservation, agent=None):
-    """
-    Reward for controlling and exploring the map strategically.
-
-    Args:
-        observation: Current game state observation
-        agent: The agent instance (to track visited positions)
-
-    Returns:
-        float: Map control reward
-    """
     reward = 0.0
 
     # Check if agent has position_history attribute, create if not
     if agent and not hasattr(agent, "position_history"):
         agent.position_history = []
-        agent.position_grid = {}  # Grid-based position tracking
+        agent.position_grid = {}
         agent.last_new_area_time = 0
 
     if agent and hasattr(agent, "position_history"):
-        # Get current player position
         player_pos = (observation.player.x, observation.player.y)
 
-        # Convert to grid coordinates for efficient spatial tracking
-        grid_size = 50  # Size of each grid cell (adjust based on game scale)
+        grid_size = 50
         grid_x = int(player_pos[0] / grid_size)
         grid_y = int(player_pos[1] / grid_size)
         grid_pos = (grid_x, grid_y)
 
-        # Check if player has visited a new area
         if grid_pos not in agent.position_grid:
             agent.position_grid[grid_pos] = observation.game_time
             agent.last_new_area_time = observation.game_time
 
-            # Reward for exploring new area
             reward += 0.5
 
-        # Penalize staying in the same area too long
         time_since_new_area = observation.game_time - agent.last_new_area_time
-        if time_since_new_area > 10.0:  # If more than 10 seconds in same areas
+        if time_since_new_area > 10.0:
             reward -= 0.05
 
-        # Add current position to history and maintain reasonable size
         agent.position_history.append(player_pos)
         if len(agent.position_history) > 100:
             agent.position_history.pop(0)
 
     return reward
-
-
-# Utility functions
-def _calculate_distance(entity1, entity2):
-    """Calculate Euclidean distance between two entities."""
-    return ((entity1.x - entity2.x) ** 2 + (entity1.y - entity2.y) ** 2) ** 0.5
-
-
-def _check_shot_alignment(observation: GameObservation):
-    """
-    Check how well aligned the player's shot is with enemies.
-    Returns a value from 0 (no alignment) to 1 (perfect alignment).
-    """
-    player = observation.player
-    if not player.orientation:
-        return 0
-
-    # No enemies means no alignment
-    if not observation.enemies:
-        return 0
-
-    # Find the enemy that best aligns with the shot direction
-    best_alignment = 0
-    for enemy in observation.enemies:
-        # Vector from player to enemy
-        to_enemy = [enemy.x - player.x, enemy.y - player.y]
-
-        # Normalize the vector
-        distance = (to_enemy[0] ** 2 + to_enemy[1] ** 2) ** 0.5
-        if distance > 0:
-            to_enemy = [to_enemy[0] / distance, to_enemy[1] / distance]
-
-            # Calculate alignment using dot product
-            alignment = player.orientation[0] * to_enemy[0] + player.orientation[1] * to_enemy[1]
-
-            # Convert from [-1, 1] to [0, 1] range and improve precision of alignment
-            alignment = max(0, alignment)  # Only care about positive alignment
-
-            # Higher weight for closer enemies
-            if distance > 0:
-                distance_factor = min(1.0, 500.0 / distance)  # Scale with distance
-                weighted_alignment = alignment * distance_factor
-
-                best_alignment = max(best_alignment, weighted_alignment)
-
-    return best_alignment
 
 
 def winning_reward(observation: GameObservation) -> float:
@@ -571,20 +366,6 @@ def _enhanced_reward(
     previous_observation: GameObservation | None = None,
     agent: Agent | None = None,
 ) -> float:
-    """
-    Extended version of the enhanced reward function that includes the new reward components
-    and normalizes rewards by game length.
-
-    Args:
-        events: List of events from the current step
-        observation: Current game state observation
-        previous_observation: Previous game state observation
-        agent: The agent object for tracking history
-
-    Returns:
-        float: Total enhanced reward including new components, normalized by game length
-    """
-    # Get the base reward from the original function
     reward = _basic_reward(events, observation, previous_observation)
     reward += winning_reward(observation)
     other_reward = 0

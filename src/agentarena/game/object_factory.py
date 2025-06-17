@@ -1,7 +1,3 @@
-"""
-Factory for creating game objects in AgentArena.
-"""
-
 import random
 
 from agentarena.agent.agent import Agent
@@ -11,7 +7,7 @@ from agentarena.game.entities.projectile import Projectile
 from agentarena.game.entities.wall import Wall
 from agentarena.game.level import Level
 from agentarena.models.config import GameConfig
-from agentarena.models.entities import PlayerModel, WallModel
+from agentarena.models.entities import WallModel
 from agentarena.models.events import (
     BulletFiredEvent,
     EnemyHitEvent,
@@ -28,7 +24,6 @@ from agentarena.models.observations import (
 
 
 class ObjectFactory:
-
     def __init__(self, config: GameConfig, player_agent: Agent, enemy_agent: Agent) -> None:
         self.config = config
         self.player_agent = player_agent
@@ -151,19 +146,6 @@ class ObjectFactory:
         game_time: float,
         score: int,
     ) -> GameObservation:
-        """
-        Create a game observation from the player's perspective.
-
-        Args:
-            player: Player entity
-            enemies: List of enemy entities
-            bullets: List of bullet entities
-            game_time: Current game time
-            score: Current score
-
-        Returns:
-            GameObservation: The game observation
-        """
         return GameObservation(
             player=PlayerObservation(
                 x=player.x if player.x is not None else 0,
