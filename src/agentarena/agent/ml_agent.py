@@ -14,7 +14,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 
-# Updated constants for state encoding
+MAX_RECENT_ACTIONS: int = 100
 MAX_ENEMIES = 3
 MAX_BULLETS = 12
 ENEMY_FEATURES = 7
@@ -24,7 +24,6 @@ MAX_WALLS = 120
 WALL_FEATURES_PER_WALL = 2  # x, y
 TOTAL_WALL_FEATURES = MAX_WALLS * WALL_FEATURES_PER_WALL
 
-# Calculate expected state vector size
 STATE_SIZE = (
     PLAYER_FEATURES
     + (MAX_ENEMIES * ENEMY_FEATURES)
@@ -34,9 +33,7 @@ STATE_SIZE = (
 
 
 class PrioritizedReplay:
-    """Simple prioritized experience replay that emphasizes winning transitions."""
-
-    def __init__(self, capacity=10000, winning_bonus=10.0):
+    def __init__(self, capacity: int = 10000, winning_bonus: float = 10.0) -> None:
         self.capacity = capacity
         self.memory = []
         self.priorities = []
@@ -44,7 +41,6 @@ class PrioritizedReplay:
         self.winning_bonus = winning_bonus
 
     def push(self, state, action, reward, next_state, done):
-        """Add a new experience with priority based on reward and winning."""
         experience = Experience(
             state=state,
             action=action,
@@ -52,7 +48,7 @@ class PrioritizedReplay:
             next_state=next_state,
             done=done,
         )
-        priority = abs(reward) + 1.0  # Base priority (never zero)
+        priority = abs(reward) + 1.0
 
         if done and reward > 0:
             priority *= self.winning_bonus
@@ -67,7 +63,6 @@ class PrioritizedReplay:
         self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size):
-        """Sample experiences with probability proportional to priority."""
         batch_size = min(batch_size, len(self.memory))
 
         probs = np.array(self.priorities) / sum(self.priorities)
@@ -106,7 +101,6 @@ class PolicyNetwork(nn.Module):
         self._initialize_weights()
 
     def _initialize_weights(self) -> None:
-        """Initialize weights using Xavier initialization for better convergence."""
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
@@ -135,7 +129,6 @@ class MLAgent(Agent):
         self.shots_fired = 0
         self.enemy_hits = 0
 
-        # Use config if provided, otherwise use default parameters
         if config:
             self.gamma = config.gamma
             self.epsilon = config.epsilon
@@ -153,7 +146,6 @@ class MLAgent(Agent):
             self.batch_size = 64
             self.memory_capacity = 10000
 
-        # Setup the action space
         self.directions = [
             None,
             Direction.UP,
@@ -203,39 +195,29 @@ class MLAgent(Agent):
         self.enemy_hits = 0
 
     def encode_observation(self, observation: GameObservation) -> np.ndarray:
-        """Enhanced state encoding with walls and absolute position."""
-        # Extract player information
         player = observation.player
         player_x = player.x
         player_y = player.y
         player_health = player.health
 
-        # Normalize absolute position to [0,1] range
-        norm_x = player_x / 1200.0  # Assuming 1200 is display width
-        norm_y = player_y / 900.0  # Assuming 900 is display height
+        norm_x = player_x / 1200.0
+        norm_y = player_y / 900.0
 
-        # Process enemies (existing code)
         enemy_features = []
         for enemy in observation.enemies[:MAX_ENEMIES]:
-            # Calculate relative position to player
             rel_x = enemy.x - player_x
             rel_y = enemy.y - player_y
             abs_enemy_x = enemy.x
             abs_enemy_y = enemy.y
             distance = np.sqrt(rel_x**2 + rel_y**2)
 
-            # Normalize relative positions
             rel_x /= 1200.0
             rel_y /= 900.0
             abs_enemy_x /= 1200.0
             abs_enemy_y /= 900.0
             distance /= np.sqrt(1200.0**2 + 900.0**2)
-
-            # Calculate angle between player and enemy
-            angle = np.arctan2(rel_y, rel_x) / np.pi  # Normalize to [-1,1]
-
-            # Add enemy health (normalized)
-            enemy_health = enemy.health / 3.0  # Assuming max health is 3
+            angle = np.arctan2(rel_y, rel_x) / np.pi
+            enemy_health = enemy.health / 3.0
 
             enemy_features.extend(
                 [
@@ -308,23 +290,13 @@ class MLAgent(Agent):
             + len(wall_features)
         )
 
-        assert (
-            len(state) == expected_size
-        ), f"State size mismatch: got {len(state)}, expected {expected_size}"
+        assert len(state) == expected_size, (
+            f"State size mismatch: got {len(state)}, expected {expected_size}"
+        )
 
         return np.array(state, dtype=np.float32)
 
     def _action_to_game_action(self, action_idx: int) -> Action:
-        """
-        Convert network output (action index) to game Action.
-
-        Args:
-            action_idx: Index of the selected action
-
-        Returns:
-            Action: Game action object
-        """
-        # Determine direction and shooting from action index
         direction_idx = action_idx % len(self.directions)
         is_shooting = action_idx >= len(self.directions)
 
@@ -352,7 +324,7 @@ class MLAgent(Agent):
             action_idx = random.randint(0, self.n_actions - 1)
         else:
             with torch.no_grad():
-                q_values = self.policy_net(state_tensor)  # Use policy_net instead of model
+                q_values = self.policy_net(state_tensor)
                 action_idx = q_values.max(1)[1].item()
 
         action = self._action_to_game_action(action_idx)
@@ -369,7 +341,7 @@ class MLAgent(Agent):
 
         if self.get_action_count % 1000 == 0:
             with torch.no_grad():
-                self.policy_net.eval()  # Ensure in eval mode for debugging
+                self.policy_net.eval()
                 q_values = self.policy_net(state_tensor).cpu().numpy()[0]
 
                 top_actions = np.argsort(q_values)[-3:][::-1]
@@ -432,7 +404,6 @@ class MLAgent(Agent):
         ).to(device)
         dones = torch.FloatTensor([exp.done for exp in experiences]).to(device)
 
-        # Compute current Q values using policy network
         current_q_values = self.policy_net(states).gather(1, actions)
 
         with torch.no_grad():
@@ -440,33 +411,22 @@ class MLAgent(Agent):
 
             next_q_values = self.policy_net(next_states).gather(1, next_action_indices).squeeze()
 
-        # Compute target Q values (without tanh constraint)
         target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
 
-        # Compute loss
         loss = F.smooth_l1_loss(current_q_values.squeeze(), target_q_values)
 
-        # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
         self.optimizer.step()
         self.scheduler.step()
 
-        if done:  # Update at the end of episodes
+        if done:
             self.episodes_done += 1
-
-            # Decay epsilon at the end of each episode
             if self.epsilon > self.epsilon_min:
                 self.epsilon *= self.epsilon_decay
 
     def save_model(self, path: str) -> None:
-        """
-        Save the model to disk.
-
-        Args:
-            path: Path to save the model to
-        """
         torch.save(
             {
                 "policy_net_state_dict": self.policy_net.state_dict(),
@@ -479,33 +439,19 @@ class MLAgent(Agent):
         )
 
     def load_model(self, path: str) -> None:
-        """
-        Load the model from disk.
-
-        Args:
-            path: Path to load the model from
-        """
         checkpoint = torch.load(path, map_location=torch.device("cpu"))
         self.state_size = checkpoint["state_size"]
         self.n_actions = checkpoint["n_actions"]
         self.epsilon = checkpoint["epsilon"]
 
-        # Initialize models
         self.policy_net = self._initialize_model(self.state_size)
 
-        # Check if we're loading an older model without separate networks
         if "policy_net_state_dict" in checkpoint:
-            # New format with separate networks
             self.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
         else:
-            # Old format with single model
             self.policy_net.load_state_dict(checkpoint["model_state_dict"])
-
-        # Load episode counter if available
         if "episodes_done" in checkpoint:
             self.episodes_done = checkpoint["episodes_done"]
-
-        # Set models to evaluation mode for inference
         if not self.is_training:
             self.policy_net.eval()
 

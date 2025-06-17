@@ -17,8 +17,6 @@ from agentarena.models.config import GameConfig
 from agentarena.models.observations import GameObservation
 from agentarena.training.demo_collection import DemonstrationLogger
 
-LOG_PATH: str = "src/agentarena/data"
-
 
 class Game:
     """Main game class that manages the game state and coordinates all systems."""
@@ -53,7 +51,6 @@ class Game:
         self.game_time: float = 0.0
         self.score: int = 0
         self.dt: float = 1 / 60  # Fixed time step for predictable physics
-        self.episode_log: list[dict] = []
 
         # Game objects
         self.player = None
@@ -90,7 +87,6 @@ class Game:
         self.events = []
         self.bullets = []
         self.explosions = []
-        self.episode_log = []
 
         # Reset the agents
         self.player_agent.reset()
@@ -161,10 +157,6 @@ class Game:
 
         # Clear events for this frame
         self.events = []
-
-        # At the start of episode, store walls once
-        if len(self.episode_log) == 0:
-            self.episode_log.append({"static": self.static_map_data})
 
         # Check game over condition
         if self.player.health <= 0:
@@ -251,26 +243,6 @@ class Game:
         # Update explosions
         self._update_explosions()
 
-        # Log game state - convert events to dictionaries for logging
-        event_dicts = [event.model_dump() for event in self.events]
-
-        # Track player action for the log
-        player_action_dict = (
-            player_action.model_dump()
-            if self.player is not None
-            else {"is_shooting": False, "direction": None}
-        )
-
-        self.episode_log.append(
-            {
-                "observation": self.get_observation("player").model_dump(),
-                "action": player_action_dict,
-                "events": event_dicts,
-                "done": not self.running,
-                "game_time": self.game_time,
-            },
-        )
-
         # Render the frame if we have a screen
         if self.rendering_system is not None:
             self.rendering_system.render(
@@ -299,7 +271,7 @@ class Game:
             else:
                 i += 1
 
-    def _sanitize_for_json(self, data):
+    def _sanitize_for_json(self, data: list | dict | pygame.Rect | None) -> None | dict | list:
         """Recursively remove pygame.Rect and other non-serializable objects from data structure."""
         if isinstance(data, dict):
             return {

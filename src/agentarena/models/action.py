@@ -1,17 +1,9 @@
-"""
-Action definitions and utilities for AgentArena.
-"""
-
 from enum import Enum
 
 from pydantic import BaseModel, computed_field
 
 
 class Direction(str, Enum):
-    """
-    Enumeration of possible movement directions.
-    """
-
     UP = "up"
     DOWN = "down"
     LEFT = "left"
@@ -22,7 +14,6 @@ class Direction(str, Enum):
     DOWN_RIGHT = "bottom_right"
 
 
-# Mapping from direction enums to 2D vector components
 DIRECTION_VECTORS: dict[Direction, tuple[int, int]] = {
     Direction.UP: (0, -1),
     Direction.DOWN: (0, 1),

@@ -1,7 +1,3 @@
-"""
-Manual agent controlled by the player's keyboard input.
-"""
-
 import pygame
 
 from agentarena.agent.agent import Agent

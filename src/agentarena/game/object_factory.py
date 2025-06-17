@@ -1,7 +1,3 @@
-"""
-Factory for creating game objects in AgentArena.
-"""
-
 import random
 
 from agentarena.agent.agent import Agent
@@ -150,19 +146,6 @@ class ObjectFactory:
         game_time: float,
         score: int,
     ) -> GameObservation:
-        """
-        Create a game observation from the player's perspective.
-
-        Args:
-            player: Player entity
-            enemies: List of enemy entities
-            bullets: List of bullet entities
-            game_time: Current game time
-            score: Current score
-
-        Returns:
-            GameObservation: The game observation
-        """
         return GameObservation(
             player=PlayerObservation(
                 x=player.x if player.x is not None else 0,

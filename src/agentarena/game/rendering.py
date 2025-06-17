@@ -1,7 +1,3 @@
-"""
-Rendering system for the AgentArena game.
-"""
-
 import pygame
 
 from agentarena.game.asset_manager import AssetManager
@@ -28,10 +24,14 @@ class RenderingSystem:
     def _initialize_text_cache(self) -> None:
         self.health_texts = {}
         for health in range(11):  # Assuming max health is 10
-            self.health_texts[health] = self.font.render(f"Health: {health}", True, (255, 255, 255))
+            self.health_texts[health] = self.font.render(
+                f"Health: {health}",
+                True,
+                (255, 255, 255),
+            )
         self.ammo_texts = {}
         for ammo in range(11):
-            self.ammo_texts[ammo] = self.font.render(f"Ammo: {ammo}", True, (255, 255, 255))
+            self.ammo_texts[ammo] = self.font.render(f"Ammo: {ammo}", True, (255, 255, 255),)
         self.score_text = self.font.render("Score: 0", True, (255, 255, 255))
 
     def get_direction_from_vector(self, direction_vector) -> Direction:

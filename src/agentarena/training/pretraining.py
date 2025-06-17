@@ -1,7 +1,3 @@
-"""
-Pre-training module for imitation learning using collected demonstrations.
-"""
-
 import argparse
 from pathlib import Path
 

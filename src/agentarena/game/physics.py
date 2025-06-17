@@ -1,7 +1,3 @@
-"""
-Physics system for AgentArena, handling movement, collisions, and spatial partitioning.
-"""
-
 import pygame
 from pygame.math import Vector2
 

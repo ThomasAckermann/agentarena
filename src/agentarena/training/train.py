@@ -313,30 +313,11 @@ def _save_training_results(
     episode_details: list[EpisodeResult],
     episodes_completed: int,
 ) -> None:
-    """
-    Save training results to disk.
-
-    Args:
-        config: Training configuration
-        timestamp: Timestamp string for filename
-        episode_rewards: List of rewards for each episode
-        episode_lengths: List of steps for each episode
-        epsilons: List of epsilon values used
-        episode_details: Detailed episode results
-        episodes_completed: Number of episodes completed
-    """
-    # Create results directory if it doesn't exist
     config.results_dir.mkdir(exist_ok=True)
-
-    # Create results file path
     results_file = (
         config.results_dir / f"{config.model_name}_{timestamp}_{config.reward_type.value}.pkl"
     )
-
-    # Get ML config as a dict - this ensures all fields are properly serialized
     ml_config_dict = config.ml_config.model_dump()
-
-    # Create training results model
     results = TrainingResults(
         episode_rewards=episode_rewards,
         episode_lengths=episode_lengths,
@@ -360,14 +341,6 @@ def evaluate(
     episodes: int = 10,
     render: bool = True,
 ) -> None:
-    """
-    Evaluate a trained ML agent.
-
-    Args:
-        model_path: Path to the model file
-        episodes: Number of episodes to evaluate
-        render: Whether to render the game
-    """
     print(f"Evaluating ML agent from {model_path}...")
 
     # Initialize pygame if needed for rendering
@@ -595,7 +568,7 @@ if __name__ == "__main__":
         )
 
         train(config=training_config, pretrained_model_path=args.pretrained_model)
-    else:  # evaluate
+    else:
         if not args.model_path:
             parser.error("--model-path is required for evaluation mode")
         evaluate(model_path=Path(args.model_path), episodes=args.episodes, render=args.render)
