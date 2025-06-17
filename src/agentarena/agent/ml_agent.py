@@ -68,11 +68,9 @@ class PrioritizedReplay:
         probs = np.array(self.priorities) / sum(self.priorities)
 
         indices = np.random.choice(len(self.memory), batch_size, p=probs)
-        samples = [self.memory[idx] for idx in indices]
+        return [self.memory[idx] for idx in indices]
 
-        return samples
-
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.memory)
 
 
