@@ -15,7 +15,9 @@ from agentarena.models.observations import GameObservation
 
 
 class ActionEncoder:
+
     def __init__(self):
+
         self.directions = [
             None,
             Direction.UP,
@@ -30,6 +32,7 @@ class ActionEncoder:
         self.n_actions = len(self.directions) * 2
 
     def encode_action(self, action: Action) -> np.ndarray:
+
         direction_idx = (
             self.directions.index(action.direction) if action.direction in self.directions else 0
         )
@@ -37,12 +40,14 @@ class ActionEncoder:
         shooting_offset = len(self.directions) if action.is_shooting else 0
         action_idx = direction_idx + shooting_offset
 
+
         one_hot = np.zeros(self.n_actions)
         one_hot[action_idx] = 1.0
 
         return one_hot
 
     def decode_action(self, one_hot: np.ndarray) -> Action:
+
         action_idx = np.argmax(one_hot)
 
         direction_idx = action_idx % len(self.directions)
@@ -60,6 +65,7 @@ class ActionEncoder:
 
 class DemonstrationLogger:
     def __init__(self, demonstrations_dir: str = "demonstrations"):
+
         self.demonstrations_dir = Path(demonstrations_dir)
         self.demonstrations_dir.mkdir(exist_ok=True)
         self.action_encoder = ActionEncoder()
@@ -79,7 +85,6 @@ class DemonstrationLogger:
 
         temp_agent = MLAgent()
         state_vector = temp_agent.encode_observation(observation)
-
         action_one_hot = self.action_encoder.encode_action(action)
 
         step_data = {
@@ -93,7 +98,6 @@ class DemonstrationLogger:
     def end_episode(self, won: bool = False, score: int = 0) -> str:
         if not self.episode_active or not self.current_episode:
             return ""
-
         episode_data = {
             "steps": self.current_episode,
             "metadata": {
@@ -103,7 +107,6 @@ class DemonstrationLogger:
                 "score": score,
             },
         }
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"demo_{timestamp}_{score}pts_{'win' if won else 'loss'}.json"
         filepath = self.demonstrations_dir / filename
@@ -129,6 +132,7 @@ class DemonstrationDataset(Dataset):
         self._load_demonstrations()
 
     def _load_demonstrations(self) -> None:
+
         demo_files = list(self.demonstrations_dir.glob("demo_*.json"))
 
         if not demo_files:
@@ -141,10 +145,12 @@ class DemonstrationDataset(Dataset):
         for demo_file in demo_files:
             try:
                 with open(demo_file) as f:
+
                     episode_data = json.load(f)
 
                 steps = episode_data["steps"]
                 metadata = episode_data["metadata"]
+
 
                 for step in steps:
                     self.states.append(np.array(step["state"], dtype=np.float32))
@@ -181,6 +187,7 @@ def create_demonstration_dataloader(
 
 
 def analyze_demonstrations(demonstrations_dir: str = "demonstrations") -> None:
+
     demo_dir = Path(demonstrations_dir)
     demo_files = list(demo_dir.glob("demo_*.json"))
 
@@ -232,6 +239,7 @@ if __name__ == "__main__":
     print("Testing demonstration data collection...")
 
     analyze_demonstrations()
+
     try:
         dataset = DemonstrationDataset()
         print(f"Dataset loaded with {len(dataset)} samples")

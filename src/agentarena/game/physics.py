@@ -23,7 +23,7 @@ class PhysicsSystem:
 
     def add_to_collision_grid(self, obj, obj_type: str) -> None:
         if obj.x is None or obj.y is None:
-            return
+            return None
 
         grid_x1 = max(0, int(obj.x // self.grid_size))
         grid_y1 = max(0, int(obj.y // self.grid_size))

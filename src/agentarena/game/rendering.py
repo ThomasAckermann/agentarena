@@ -6,6 +6,7 @@ from agentarena.models.config import GameConfig
 
 
 class RenderingSystem:
+
     def __init__(
         self,
         screen: pygame.Surface,

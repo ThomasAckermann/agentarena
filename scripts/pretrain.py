@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Script to pre-train agent on demonstrations."""
-
 import argparse
 
 from agentarena.training.pretraining import pretrain_agent
@@ -22,6 +21,7 @@ def main():
 
     if model_path:
         print("\n✅ Pre-training complete! Use with:")
+
         print(f"python -m agentarena.training.train --pretrained-model {model_path}")
 
 

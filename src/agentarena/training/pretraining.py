@@ -1,3 +1,4 @@
+
 import argparse
 from pathlib import Path
 
@@ -12,10 +13,12 @@ from agentarena.training.demo_collection import DemonstrationDataset
 
 
 class ImitationLearner:
+
     def __init__(
         self,
         ml_config: MLAgentConfig,
         demonstrations_dir: str = "demonstrations",
+
         device: torch.device | None = None,
     ):
         self.ml_config = ml_config
@@ -47,6 +50,7 @@ class ImitationLearner:
         tensorboard_dir: str | None = None,
     ) -> float:
         print(f"Starting pre-training for {epochs} epochs...")
+
 
         try:
             dataset = DemonstrationDataset(self.demonstrations_dir)
@@ -88,13 +92,11 @@ class ImitationLearner:
                 writer.add_scalar("Loss/Validation", val_loss, epoch)
                 writer.add_scalar("Accuracy/Train", train_accuracy, epoch)
                 writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
-
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 if save_path:
                     self._save_model(save_path)
                     print(f"New best model saved with validation accuracy: {val_accuracy:.3f}")
-
         if writer:
             writer.close()
 
@@ -107,7 +109,6 @@ class ImitationLearner:
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
-
         for batch_idx, (states, actions) in enumerate(train_loader):
             states = states.to(self.device)
             actions = actions.to(self.device)
@@ -136,17 +137,13 @@ class ImitationLearner:
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
-
         with torch.no_grad():
             for states, actions in val_loader:
                 states = states.to(self.device)
                 actions = actions.to(self.device)
-
                 action_indices = torch.argmax(actions, dim=1)
-
                 outputs = self.policy_net(states)
                 loss = self.criterion(outputs, action_indices)
-
                 total_loss += loss.item()
                 _, predicted = torch.max(outputs.data, 1)
                 correct_predictions += (predicted == action_indices).sum().item()
@@ -184,13 +181,13 @@ def pretrain_agent(
     ml_config = MLAgentConfig(learning_rate=learning_rate)
 
     learner = ImitationLearner(ml_config, demonstrations_dir)
-
     final_accuracy = learner.pretrain(
         epochs=epochs,
         batch_size=batch_size,
         save_path=save_path,
         tensorboard_dir=tensorboard_dir,
     )
+
 
     if final_accuracy > 0:
         print(f"Pre-training successful! Model saved to {save_path}")
@@ -201,6 +198,7 @@ def pretrain_agent(
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(
         description="Pre-train ML agent using demonstrations",
     )
@@ -231,6 +229,7 @@ if __name__ == "__main__":
         "--save-path",
         default="models/pretrained_agent.pt",
         help="Path to save pre-trained model",
+
     )
     parser.add_argument(
         "--tensorboard-dir",
@@ -239,9 +238,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
     Path(args.save_path).parent.mkdir(exist_ok=True)
-
     pretrain_agent(
         demonstrations_dir=args.demonstrations_dir,
         epochs=args.epochs,

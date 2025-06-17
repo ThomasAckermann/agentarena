@@ -188,7 +188,6 @@ class Game:
             player_action = self.player.agent.get_action(player_observation)
             if self.demo_logger:
                 self.demo_logger.log_step(player_observation, player_action)
-                print("test")
             self.physics_system.apply_action(
                 "player",
                 self.player,
@@ -255,6 +254,11 @@ class Game:
                 self.game_time,
             )
 
+        if not self.running and self.demo_logger:
+            won = len(self.enemies) == 0  # Win condition
+            self.demo_logger.end_episode(won=won, score=self.score)
+            print(f"📋 Demonstration episode saved! Win: {won}, Score: {self.score}")
+
     def score_callback(self, points: int) -> None:
         """Callback to update the score."""
         self.score += points
@@ -270,8 +274,8 @@ class Game:
                 self.explosions.pop(i)
             else:
                 i += 1
-
     def _sanitize_for_json(self, data: list | dict | pygame.Rect | None) -> None | dict | list:
+  
         """Recursively remove pygame.Rect and other non-serializable objects from data structure."""
         if isinstance(data, dict):
             return {

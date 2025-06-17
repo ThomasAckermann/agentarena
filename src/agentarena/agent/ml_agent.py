@@ -50,6 +50,7 @@ class PrioritizedReplay:
         )
         priority = abs(reward) + 1.0
 
+
         if done and reward > 0:
             priority *= self.winning_bonus
 
@@ -71,6 +72,7 @@ class PrioritizedReplay:
         return [self.memory[idx] for idx in indices]
 
     def __len__(self) -> int:
+
         return len(self.memory)
 
 
@@ -448,6 +450,7 @@ class MLAgent(Agent):
             self.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
         else:
             self.policy_net.load_state_dict(checkpoint["model_state_dict"])
+
         if "episodes_done" in checkpoint:
             self.episodes_done = checkpoint["episodes_done"]
         if not self.is_training:
