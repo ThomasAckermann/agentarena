@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.models.config import load_config
-from agentarena.models.events import PlayerHitEvent, EnemyHitEvent
+from agentarena.models.events import EnemyHitEvent, PlayerHitEvent
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
@@ -66,7 +66,6 @@ def train(
             if "policy_net_state_dict" in checkpoint:
                 # New format with separate networks
                 player_agent.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
-                player_agent.target_net.load_state_dict(checkpoint["policy_net_state_dict"])
                 print("✅ Pre-trained weights loaded successfully!")
 
                 # Optionally reduce initial epsilon since we start with good policy
@@ -94,7 +93,7 @@ def train(
 
         print(
             f"Model loaded with new parameters: LR={config.ml_config.learning_rate}, "
-            f"gamma={config.ml_config.gamma}, epsilon={config.ml_config.epsilon}"
+            f"gamma={config.ml_config.gamma}, epsilon={config.ml_config.epsilon}",
         )
 
     # Import game here to avoid circular imports
@@ -510,7 +509,8 @@ if __name__ == "__main__":
         help="Mode to run in",
     )
     parser.add_argument(
-        "--pretrained-model", help="Path to pre-trained model file (from demonstration learning)"
+        "--pretrained-model",
+        help="Path to pre-trained model file (from demonstration learning)",
     )
     parser.add_argument(
         "--model-name",

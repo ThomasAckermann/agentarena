@@ -1,7 +1,3 @@
-"""
-Reward functions for reinforcement learning in AgentArena.
-"""
-
 import math
 
 from agentarena.agent.agent import Agent
@@ -15,7 +11,6 @@ from agentarena.models.events import (
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import RewardType
 
-# Constants for reward calculations
 NEARBY_DISTANCE_THRESHOLD = 300.0  # Distance threshold for considering enemies "nearby"
 BULLET_DODGE_DISTANCE = 100.0  # Distance threshold for bullet dodging detection
 
@@ -26,18 +21,6 @@ def calculate_reward(
     previous_observation: GameObservation | None = None,
     reward_type: RewardType = RewardType.BASIC,
 ) -> float:
-    """
-    Calculate rewards based on game events and observations.
-
-    Args:
-        events: List of events that occurred during the step
-        observation: Current game state observation
-        previous_observation: Previous game state observation (optional)
-        reward_type: Type of reward function to use
-
-    Returns:
-        float: The calculated reward
-    """
     if reward_type == RewardType.BASIC:
         return _basic_reward(events, observation, previous_observation)
     elif reward_type == RewardType.AGGRESSIVE:

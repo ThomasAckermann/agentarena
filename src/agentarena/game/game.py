@@ -167,7 +167,11 @@ class Game:
             self.episode_log.append({"static": self.static_map_data})
 
         # Check game over condition
-        if self.player is not None and self.player.health <= 0:
+        if self.player.health <= 0:
+            if not self.running and self.demo_logger:
+                won = len(self.enemies) == 0
+                self.demo_logger.end_episode(won=won, score=self.score)
+                print(f"📋 Demonstration episode saved! Win: {won}, Score: {self.score}")
             self.event_manager.create_player_destroyed_event(
                 self.events,
                 self.game_time,
@@ -177,8 +181,11 @@ class Game:
             return
 
         if len(self.enemies) == 0:
-            # All enemies defeated - victory!
-            self.score += 100  # Big score bonus for winning
+            self.score += 100
+            if self.demo_logger:
+                won = len(self.enemies) == 0
+                self.demo_logger.end_episode(won=won, score=self.score)
+                print(f"📋 Demonstration episode saved! Win: {won}, Score: {self.score}")
             self.running = False
             return
 
@@ -189,6 +196,7 @@ class Game:
             player_action = self.player.agent.get_action(player_observation)
             if self.demo_logger:
                 self.demo_logger.log_step(player_observation, player_action)
+                print("test")
             self.physics_system.apply_action(
                 "player",
                 self.player,
@@ -274,11 +282,6 @@ class Game:
                 self.score,
                 self.game_time,
             )
-
-        if not self.running and self.demo_logger:
-            won = len(self.enemies) == 0  # Win condition
-            self.demo_logger.end_episode(won=won, score=self.score)
-            print(f"📋 Demonstration episode saved! Win: {won}, Score: {self.score}")
 
     def score_callback(self, points: int) -> None:
         """Callback to update the score."""

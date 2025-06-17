@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Script to pre-train agent on demonstrations."""
 
-from agentarena.training.pretraining import pretrain_agent
 import argparse
+
+from agentarena.training.pretraining import pretrain_agent
 
 
 def main():
@@ -14,11 +15,13 @@ def main():
     args = parser.parse_args()
 
     model_path = pretrain_agent(
-        demonstrations_dir=args.demos_dir, epochs=args.epochs, save_path=args.output
+        demonstrations_dir=args.demos_dir,
+        epochs=args.epochs,
+        save_path=args.output,
     )
 
     if model_path:
-        print(f"\n✅ Pre-training complete! Use with:")
+        print("\n✅ Pre-training complete! Use with:")
         print(f"python -m agentarena.training.train --pretrained-model {model_path}")
 
 

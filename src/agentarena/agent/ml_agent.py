@@ -46,7 +46,11 @@ class PrioritizedReplay:
     def push(self, state, action, reward, next_state, done):
         """Add a new experience with priority based on reward and winning."""
         experience = Experience(
-            state=state, action=action, reward=reward, next_state=next_state, done=done
+            state=state,
+            action=action,
+            reward=reward,
+            next_state=next_state,
+            done=done,
         )
         priority = abs(reward) + 1.0  # Base priority (never zero)
 
@@ -78,7 +82,6 @@ class PrioritizedReplay:
 
 
 class PolicyNetwork(nn.Module):
-
     def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
 
@@ -115,7 +118,6 @@ class PolicyNetwork(nn.Module):
 
 
 class MLAgent(Agent):
-
     def __init__(
         self,
         name: str = "MLAgent",

@@ -1,3 +1,3 @@
 python -m agentarena.main --player ml \
-  --ml-model models/rebalanced_20250416_203106_enhanced_best.pt \
+  --ml-model ml_models/ml_agent_20250617_101448_advanced_final.pt \
   --enemy random

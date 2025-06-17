@@ -11,7 +11,7 @@ from agentarena.game.entities.projectile import Projectile
 from agentarena.game.entities.wall import Wall
 from agentarena.game.level import Level
 from agentarena.models.config import GameConfig
-from agentarena.models.entities import PlayerModel, WallModel
+from agentarena.models.entities import WallModel
 from agentarena.models.events import (
     BulletFiredEvent,
     EnemyHitEvent,
@@ -28,7 +28,6 @@ from agentarena.models.observations import (
 
 
 class ObjectFactory:
-
     def __init__(self, config: GameConfig, player_agent: Agent, enemy_agent: Agent) -> None:
         self.config = config
         self.player_agent = player_agent

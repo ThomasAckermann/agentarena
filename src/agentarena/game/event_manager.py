@@ -11,10 +11,10 @@ from agentarena.models.events import (
 
 
 class EventManager:
-
     def __init__(self) -> None:
+        pass
 
-    def create_bullet_fired_event(self, events, game_time, owner_id, direction, position, ) -> None:
+    def create_bullet_fired_event(self, events, game_time, owner_id, direction, position) -> None:
         events.append(
             BulletFiredEvent(
                 timestamp=game_time,
@@ -24,7 +24,7 @@ class EventManager:
             ),
         )
 
-    def create_enemy_hit_event(self, events, game_time, enemy_id, x, y, ) -> None:
+    def create_enemy_hit_event(self, events, game_time, enemy_id, x, y) -> None:
         events.append(
             EnemyHitEvent(
                 timestamp=game_time,
@@ -34,8 +34,14 @@ class EventManager:
             ),
         )
 
-    def create_player_hit_event(self, events, game_time, bullet_owner, x, y,
-                                ) -> None:
+    def create_player_hit_event(
+        self,
+        events,
+        game_time,
+        bullet_owner,
+        x,
+        y,
+    ) -> None:
         events.append(
             PlayerHitEvent(
                 timestamp=game_time,

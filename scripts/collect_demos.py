@@ -2,6 +2,7 @@
 """Script to collect human demonstrations."""
 
 import argparse
+
 from agentarena.training.demo_collection import analyze_demonstrations
 
 
