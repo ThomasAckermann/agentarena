@@ -6,7 +6,7 @@ results/
 uv.lock
 runs/
 .DS_STORE
-demostrations/
+demonstrations/
 *.log
 models/
 

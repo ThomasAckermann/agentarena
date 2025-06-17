@@ -1,45 +1,32 @@
-
-import argparse
-from pathlib import Path
+from collections import Counter
 
 import torch
-from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 
-from agentarena.agent.ml_agent import MLAgent, PolicyNetwork
+from agentarena.agent.ml_agent import MLAgent
 from agentarena.models.training import MLAgentConfig
 from agentarena.training.demo_collection import DemonstrationDataset
 
 
 class ImitationLearner:
-
     def __init__(
         self,
         ml_config: MLAgentConfig,
         demonstrations_dir: str = "demonstrations",
-
         device: torch.device | None = None,
     ):
         self.ml_config = ml_config
         self.demonstrations_dir = demonstrations_dir
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        from agentarena.agent.ml_agent import STATE_SIZE
+        # Create MLAgent with multi-head network
+        self.agent = MLAgent(is_training=True, config=ml_config)
 
-        self.state_size = STATE_SIZE
-        self.n_actions = 18
-
-        self.policy_net = PolicyNetwork(input_size=self.state_size, output_size=self.n_actions).to(
-            self.device,
-        )
-
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.ml_config.learning_rate)
-
-        self.criterion = nn.CrossEntropyLoss()
+        # Set to imitation learning mode
+        self.agent.set_training_mode("imitation")
 
         print(f"ImitationLearner initialized on {self.device}")
-        print(f"Network: {self.state_size} -> {self.n_actions}")
 
     def pretrain(
         self,
@@ -48,9 +35,10 @@ class ImitationLearner:
         validation_split: float = 0.2,
         save_path: str | None = None,
         tensorboard_dir: str | None = None,
+        balance_actions: bool = True,
+        balance_factor: float = 0.7,
     ) -> float:
         print(f"Starting pre-training for {epochs} epochs...")
-
 
         try:
             dataset = DemonstrationDataset(self.demonstrations_dir)
@@ -64,12 +52,21 @@ class ImitationLearner:
 
         print(f"Loaded {len(dataset)} demonstration samples")
 
-        val_size = int(len(dataset) * validation_split)
-        train_size = len(dataset) - val_size
-        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+        # Create balanced data loader if requested
+        if balance_actions:
+            train_loader, val_loader = self._create_balanced_dataloaders(
+                dataset, batch_size, validation_split, balance_factor
+            )
+        else:
+            # Standard train/val split
+            val_size = int(len(dataset) * validation_split)
+            train_size = len(dataset) - val_size
+            train_dataset, val_dataset = torch.utils.data.random_split(
+                dataset, [train_size, val_size]
+            )
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
         writer = None
         if tensorboard_dir:
@@ -82,50 +79,108 @@ class ImitationLearner:
             val_loss, val_accuracy = self._validate_epoch(val_loader)
 
             print(
-                f"Epoch {epoch+1}/{epochs} - "
+                f"Epoch {epoch + 1}/{epochs} - "
                 f"Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy:.3f} - "
-                f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.3f}",
+                f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.3f}"
             )
 
             if writer:
-                writer.add_scalar("Loss/Train", train_loss, epoch)
-                writer.add_scalar("Loss/Validation", val_loss, epoch)
-                writer.add_scalar("Accuracy/Train", train_accuracy, epoch)
-                writer.add_scalar("Accuracy/Validation", val_accuracy, epoch)
+                writer.add_scalar("Imitation/Loss/Train", train_loss, epoch)
+                writer.add_scalar("Imitation/Loss/Validation", val_loss, epoch)
+                writer.add_scalar("Imitation/Accuracy/Train", train_accuracy, epoch)
+                writer.add_scalar("Imitation/Accuracy/Validation", val_accuracy, epoch)
+
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 if save_path:
-                    self._save_model(save_path)
+                    self.agent.save_model(save_path)
                     print(f"New best model saved with validation accuracy: {val_accuracy:.3f}")
+
         if writer:
             writer.close()
 
         print(f"Pre-training completed. Best validation accuracy: {best_val_accuracy:.3f}")
         return best_val_accuracy
 
+    def _create_balanced_dataloaders(
+        self, dataset, batch_size: int, validation_split: float, balance_factor: float
+    ):
+        # Calculate action frequencies
+        action_counts = Counter()
+        for _, action in dataset:
+            action_idx = torch.argmax(action).item()
+            action_counts[action_idx] += 1
+
+        print("Action distribution before balancing:")
+        total_samples = len(dataset)
+        for action_idx, count in sorted(action_counts.items()):
+            percentage = count / total_samples * 100
+            print(f"  Action {action_idx}: {count:4d} samples ({percentage:5.1f}%)")
+
+        # Create sample weights for balancing
+        weights = []
+        for _, action in dataset:
+            action_idx = torch.argmax(action).item()
+            freq = action_counts[action_idx]
+            # Apply balance factor (1.0 = perfect balance, 0.0 = no balance)
+            weight = (1.0 / freq) ** balance_factor
+            weights.append(weight)
+
+        # Split indices for train/val
+        val_size = int(len(dataset) * validation_split)
+        train_size = len(dataset) - val_size
+        indices = torch.randperm(len(dataset))
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:]
+
+        # Create weighted samplers
+        train_weights = [weights[i] for i in train_indices]
+        train_sampler = WeightedRandomSampler(train_weights, len(train_weights), replacement=True)
+
+        # Create data loaders
+        train_dataset = torch.utils.data.Subset(dataset, train_indices)
+        val_dataset = torch.utils.data.Subset(dataset, val_indices)
+
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+        return train_loader, val_loader
+
     def _train_epoch(self, train_loader: DataLoader) -> tuple[float, float]:
-        """Train for one epoch."""
-        self.policy_net.train()
+        """Train for one epoch using the imitation learning head."""
+        self.agent.policy_net.train()
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
+
         for batch_idx, (states, actions) in enumerate(train_loader):
             states = states.to(self.device)
             actions = actions.to(self.device)
 
-            action_indices = torch.argmax(actions, dim=1)
+            # Process entire batch at once
+            self.agent.optimizer.zero_grad()
 
-            self.optimizer.zero_grad()
-            outputs = self.policy_net(states)
-            loss = self.criterion(outputs, action_indices)
+            # Get action logits from imitation head for entire batch
+            action_logits = self.agent.policy_net.get_action_logits(states)
 
+            # Convert one-hot to class indices for cross-entropy loss
+            target_indices = torch.argmax(actions, dim=1)
+
+            # Calculate cross-entropy loss
+            loss = torch.nn.functional.cross_entropy(action_logits, target_indices)
+
+            # Backward pass
             loss.backward()
-            self.optimizer.step()
+            torch.nn.utils.clip_grad_norm_(self.agent.policy_net.parameters(), max_norm=1.0)
+            self.agent.optimizer.step()
 
             total_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            correct_predictions += (predicted == action_indices).sum().item()
-            total_samples += action_indices.size(0)
+
+            # Calculate accuracy
+            with torch.no_grad():
+                predicted = torch.argmax(action_logits, dim=1)
+                correct_predictions += (predicted == target_indices).sum().item()
+                total_samples += target_indices.size(0)
 
         avg_loss = total_loss / len(train_loader)
         accuracy = correct_predictions / total_samples
@@ -133,41 +188,32 @@ class ImitationLearner:
 
     def _validate_epoch(self, val_loader: DataLoader) -> tuple[float, float]:
         """Validate for one epoch."""
-        self.policy_net.eval()
+        self.agent.policy_net.eval()
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
+
         with torch.no_grad():
             for states, actions in val_loader:
                 states = states.to(self.device)
                 actions = actions.to(self.device)
-                action_indices = torch.argmax(actions, dim=1)
-                outputs = self.policy_net(states)
-                loss = self.criterion(outputs, action_indices)
+
+                # Get action logits
+                action_logits = self.agent.policy_net.get_action_logits(states)
+
+                # Calculate loss
+                target_indices = torch.argmax(actions, dim=1)
+                loss = torch.nn.functional.cross_entropy(action_logits, target_indices)
                 total_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
-                correct_predictions += (predicted == action_indices).sum().item()
-                total_samples += action_indices.size(0)
+
+                # Calculate accuracy
+                predicted = torch.argmax(action_logits, dim=1)
+                correct_predictions += (predicted == target_indices).sum().item()
+                total_samples += target_indices.size(0)
 
         avg_loss = total_loss / len(val_loader)
         accuracy = correct_predictions / total_samples
         return avg_loss, accuracy
-
-    def _save_model(self, save_path: str) -> None:
-        """Save the pre-trained model."""
-        torch.save(
-            {
-                "policy_net_state_dict": self.policy_net.state_dict(),
-                "state_size": self.state_size,
-                "n_actions": self.n_actions,
-                "ml_config": self.ml_config.model_dump(),
-            },
-            save_path,
-        )
-
-    def load_pretrained_into_agent(self, agent: MLAgent) -> None:
-        agent.policy_net.load_state_dict(self.policy_net.state_dict())
-        print("Pre-trained weights loaded into MLAgent")
 
 
 def pretrain_agent(
@@ -177,6 +223,8 @@ def pretrain_agent(
     learning_rate: float = 0.001,
     save_path: str = "models/pretrained_agent.pt",
     tensorboard_dir: str = "runs/pretraining",
+    balance_actions: bool = True,
+    balance_factor: float = 0.7,
 ) -> str:
     ml_config = MLAgentConfig(learning_rate=learning_rate)
 
@@ -186,64 +234,15 @@ def pretrain_agent(
         batch_size=batch_size,
         save_path=save_path,
         tensorboard_dir=tensorboard_dir,
+        balance_actions=balance_actions,
+        balance_factor=balance_factor,
     )
-
 
     if final_accuracy > 0:
         print(f"Pre-training successful! Model saved to {save_path}")
+        print(
+            f"To use for RL training: python -m agentarena.training.train --pretrained-model {save_path}"
+        )
         return save_path
-    else:
-        print("Pre-training failed!")
-        return ""
-
-
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(
-        description="Pre-train ML agent using demonstrations",
-    )
-    parser.add_argument(
-        "--demonstrations-dir",
-        default="demonstrations",
-        help="Directory containing demonstration files",
-    )
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=100,
-        help="Number of training epochs",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=64,
-        help="Batch size",
-    )
-    parser.add_argument(
-        "--learning-rate",
-        type=float,
-        default=0.001,
-        help="Learning rate",
-    )
-    parser.add_argument(
-        "--save-path",
-        default="models/pretrained_agent.pt",
-        help="Path to save pre-trained model",
-
-    )
-    parser.add_argument(
-        "--tensorboard-dir",
-        default="runs/pretraining",
-        help="TensorBoard log directory",
-    )
-
-    args = parser.parse_args()
-    Path(args.save_path).parent.mkdir(exist_ok=True)
-    pretrain_agent(
-        demonstrations_dir=args.demonstrations_dir,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        save_path=args.save_path,
-        tensorboard_dir=args.tensorboard_dir,
-    )
+    print("Pre-training failed!")
+    return ""

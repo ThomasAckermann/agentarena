@@ -7,8 +7,9 @@ import pygame
 from agentarena.agent.manual_agent import ManualAgent
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
+from agentarena.agent.rule_based_agent import RuleBasedAgent
 from agentarena.game.game import Game
-from agentarena.models.config import load_config, GameConfig
+from agentarena.models.config import GameConfig, load_config
 
 
 def parse_arguments() -> Namespace:
@@ -17,13 +18,13 @@ def parse_arguments() -> Namespace:
     )
     parser.add_argument(
         "--player",
-        choices=["manual", "random", "ml"],
+        choices=["manual", "random", "ml", "rule_based"],
         default="manual",
         help="Type of agent to control the player",
     )
     parser.add_argument(
         "--enemy",
-        choices=["random", "ml"],
+        choices=["random", "ml", "rule_based"],
         default="random",
         help="Type of agent to control the enemies",
     )
@@ -51,6 +52,8 @@ def main() -> None:
         player_agent = ManualAgent()
     elif args.player == "random":
         player_agent = RandomAgent(name="RandomPlayer")
+    elif args.player == "rule_based":
+        player_agent = RuleBasedAgent(name="RuleBased")
     elif args.player == "ml":
         if not args.ml_model:
             print("Error: --ml-model is required when using ML agent")

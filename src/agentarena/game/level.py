@@ -62,7 +62,6 @@ class Level:
         self.add_border_walls()
         self.generate_wall_clusters()
         self.ensure_playable()
-        print("number of wallls: ", len(self.walls))
 
     def add_border_walls(self) -> None:
         """Add walls around the border of the screen."""
@@ -90,27 +89,11 @@ class Level:
         )
 
     def _add_wall_row(self, start_x: int, y: int, count: int) -> None:
-        """
-        Add a horizontal row of walls.
-
-        Args:
-            start_x: Starting x coordinate
-            y: Y coordinate for the row
-            count: Number of walls to add
-        """
         for i in range(count):
             x = start_x + (i * self.config.block_width)
             self._create_wall(x, y)
 
     def _add_wall_column(self, x: int, start_y: int, count: int) -> None:
-        """
-        Add a vertical column of walls.
-
-        Args:
-            x: X coordinate for the column
-            start_y: Starting y coordinate
-            count: Number of walls to add
-        """
         for i in range(count):
             y = start_y + (i * self.config.block_height)
             self._create_wall(x, y)
