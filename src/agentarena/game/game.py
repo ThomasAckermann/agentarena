@@ -8,6 +8,7 @@ import pygame
 
 from agentarena.agent.agent import Agent
 from agentarena.agent.manual_agent import ManualAgent
+from agentarena.agent.rule_based_agent import RuleBasedAgent
 from agentarena.game.asset_manager import AssetManager
 from agentarena.game.event_manager import EventManager
 from agentarena.game.object_factory import ObjectFactory
@@ -70,7 +71,7 @@ class Game:
         else:
             self.rendering_system = None
         self.demo_logger = None
-        if isinstance(self.player_agent, ManualAgent):
+        if isinstance(self.player_agent, ManualAgent | RuleBasedAgent):
             self.demo_logger = DemonstrationLogger()
             print("🎮 Demonstration collection mode activated!")
             print("Your gameplay will be recorded for AI training.")
@@ -137,9 +138,7 @@ class Game:
                 self.game_time,
                 self.score,
             )
-        else:
-            # Enemy observation (reverse perspective)
-            return self.object_factory.create_enemy_observation(
+        return self.object_factory.create_enemy_observation(
                 agent_id,
                 self.player,
                 self.enemies,
@@ -274,8 +273,8 @@ class Game:
                 self.explosions.pop(i)
             else:
                 i += 1
+
     def _sanitize_for_json(self, data: list | dict | pygame.Rect | None) -> None | dict | list:
-  
         """Recursively remove pygame.Rect and other non-serializable objects from data structure."""
         if isinstance(data, dict):
             return {
@@ -283,12 +282,11 @@ class Game:
                 for k, v in data.items()
                 if not isinstance(v, pygame.Rect)
             }
-        elif isinstance(data, list):
+        if isinstance(data, list):
             return [
                 self._sanitize_for_json(item) for item in data if not isinstance(item, pygame.Rect)
             ]
-        elif isinstance(data, pygame.Rect):
+        if isinstance(data, pygame.Rect):
             # Skip Rect objects entirely
             return None
-        else:
-            return data
+        return data

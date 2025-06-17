@@ -50,7 +50,6 @@ class PrioritizedReplay:
         )
         priority = abs(reward) + 1.0
 
-
         if done and reward > 0:
             priority *= self.winning_bonus
 
@@ -68,36 +67,46 @@ class PrioritizedReplay:
 
         probs = np.array(self.priorities) / sum(self.priorities)
 
-        indices = np.random.choice(len(self.memory), batch_size, p=probs)
+        indices = np.random.choice(len(self.memory), batch_size, p=probs)  # noqa: NPY002
         return [self.memory[idx] for idx in indices]
 
     def __len__(self) -> int:
-
         return len(self.memory)
 
 
 class PolicyNetwork(nn.Module):
-    def __init__(self, input_size: int, output_size: int) -> None:
+    def __init__(self, input_size: int, output_size: int, mode: str = "q_learning") -> None:
         super().__init__()
+        self.mode = mode
 
         self.feature_network = nn.Sequential(
             nn.Linear(input_size, 256),
-            nn.BatchNorm1d(256),
-            nn.LeakyReLU(0.1),
-            nn.Linear(256, 256),
-            nn.LeakyReLU(0.1),
+            nn.LayerNorm(256),
+            nn.Sigmoid(),
+            nn.Linear(256, 512),
+            nn.Dropout(0.3),
+            nn.Sigmoid(),
+            nn.Linear(512, 256),
+            nn.Sigmoid(),
+            nn.Dropout(0.2),
             nn.Linear(256, 128),
-            nn.LeakyReLU(0.1),
+            nn.Sigmoid(),
             nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
-            nn.LeakyReLU(0.1),
-            nn.Linear(64, 64),
-            nn.LeakyReLU(0.1),
-            nn.Linear(64, output_size),
-            nn.LeakyReLU(0.1),
+            nn.LayerNorm(64),
+            nn.Sigmoid(),
         )
 
-        # Initialize weights using xavier_uniform
+        self.q_head = nn.Sequential(
+            nn.Linear(64, 32),
+            nn.Sigmoid(),
+            nn.Linear(32, output_size),
+        )
+        self.action_head = nn.Sequential(
+            nn.Linear(64, 32),
+            nn.Sigmoid(),
+            nn.Linear(32, output_size),
+        )
+
         self._initialize_weights()
 
     def _initialize_weights(self) -> None:
@@ -107,8 +116,17 @@ class PolicyNetwork(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.feature_network(x)
+    def forward(self, x: torch.Tensor, mode: str = "q_learning") -> torch.Tensor:
+        features = self.feature_network(x)
+        if mode == "q_learning":
+            return self.q_head(features)
+        return self.action_head(features)
+
+    def get_q_values(self, x: torch.Tensor) -> torch.Tensor:
+        return self.forward(x, mode="q_learning")
+
+    def get_action_logits(self, x: torch.Tensor) -> torch.Tensor:
+        return self.forward(x, mode="imitation")
 
 
 class MLAgent(Agent):
@@ -169,6 +187,7 @@ class MLAgent(Agent):
 
         self.steps_done = 0
         self.episodes_done = 0
+        self.training_mode = "q_learning"
 
     def _initialize_model(self, state_size: int) -> PolicyNetwork:
         policy_net = PolicyNetwork(state_size, self.n_actions).to(device)
@@ -186,6 +205,12 @@ class MLAgent(Agent):
         )
 
         return policy_net
+
+    def set_training_mode(self, mode: str) -> None:
+        if mode not in ["q_learning", "imitation"]:
+            msg = f"Invalid training mode: {mode}"
+            raise ValueError(msg)
+        self.training_mode = mode
 
     def reset(self) -> None:
         self.last_state = None
@@ -279,9 +304,14 @@ class MLAgent(Agent):
             else:
                 wall_features.extend([0.0, 0.0])
 
-        state = (
-            [player_health / 3.0, norm_x, norm_y] + enemy_features + bullet_features + wall_features
-        )
+        state = [
+            player_health / 3.0,
+            norm_x,
+            norm_y,
+            *enemy_features,
+            *bullet_features,
+            *wall_features,
+        ]
 
         expected_size = (
             PLAYER_FEATURES
@@ -324,7 +354,7 @@ class MLAgent(Agent):
             action_idx = random.randint(0, self.n_actions - 1)
         else:
             with torch.no_grad():
-                q_values = self.policy_net(state_tensor)
+                q_values = self.policy_net.get_q_values(state_tensor)
                 action_idx = q_values.max(1)[1].item()
 
         action = self._action_to_game_action(action_idx)
@@ -350,23 +380,37 @@ class MLAgent(Agent):
 
         if self.is_training:
             self.recent_actions.append(action_idx)
-            if len(self.recent_actions) > 100:
+            if len(self.recent_actions) > 100:  # noqa: PLR2004
                 self.recent_actions.pop(0)
 
         self.policy_net.train(training_mode)
 
         return action
 
-    def learn_offline(self, observation: GameObservation, target_action: torch.FloatTensor):
-        encoded_observation = self.encode_observation(observation)
-        out = self.policy_net(encoded_observation)
-        loss = self.offline_loss_function(out, target_action)
+    def learn_from_demonstrations(
+        self,
+        observation: GameObservation,
+        target_action_one_hot: torch.Tensor,
+    ) -> float:
+        self.policy_net.train()
+
+        state = self.encode_observation(observation)
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+        action_logits = self.policy_net.get_action_logits(state_tensor)
+        target_indices = torch.argmax(target_action_one_hot.unsqueeze(0), dim=1).to(device)
+        loss = F.cross_entropy(action_logits, target_indices)
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
+        self.optimizer.step()
+
+        return loss.item()
 
     def learn(self, next_observation: GameObservation, reward: float, done: bool) -> None:
         if not self.is_training or self.last_state is None or self.last_action is None:
             return
 
-        if len(self.recent_actions) > 20:
+        if len(self.recent_actions) > 20:  # noqa: PLR2004
             action_counts = {}
             for a in self.recent_actions:
                 action_counts[a] = action_counts.get(a, 0) + 1
@@ -404,12 +448,14 @@ class MLAgent(Agent):
         ).to(device)
         dones = torch.FloatTensor([exp.done for exp in experiences]).to(device)
 
-        current_q_values = self.policy_net(states).gather(1, actions)
+        current_q_values = self.policy_net.get_q_values(states).gather(1, actions)
 
         with torch.no_grad():
-            next_action_indices = self.policy_net(next_states).max(1)[1].unsqueeze(1)
+            next_action_indices = self.policy_net.get_q_values(next_states).max(1)[1].unsqueeze(1)
 
-            next_q_values = self.policy_net(next_states).gather(1, next_action_indices).squeeze()
+            next_q_values = (
+                self.policy_net.get_q_values(next_states).gather(1, next_action_indices).squeeze()
+            )
 
         target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
 
