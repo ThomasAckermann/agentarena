@@ -2,25 +2,26 @@ import argparse
 import pickle
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pygame
 import torch
-
-# Add this import for TensorBoard
 from torch.utils.tensorboard import SummaryWriter
 
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.models.config import load_config
 from agentarena.models.events import EnemyHitEvent, PlayerHitEvent
-from agentarena.models.observations import GameObservation
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
 from agentarena.training.reward_functions import RewardType, calculate_reward
+
+if TYPE_CHECKING:
+    from agentarena.models.observations import GameObservation
 
 
 def train(
     config: TrainingConfig,
-    pretrained_model_path: str = None,
+    pretrained_model_path: str | None = None,
 ) -> MLAgent | None:
     print(
         f"Starting ML agent training with {config.reward_type.value} reward function...",
@@ -54,10 +55,11 @@ def train(
         is_training=True,
         config=config.ml_config,
     )
-    
+
     # Set to Q-learning mode for RL training
-    player_agent.set_training_mode('q_learning')
-    
+    player_agent.set_training_mode("q_learning")
+
+
     enemy_agent = RandomAgent()
 
     # Handle pre-trained model loading
@@ -65,7 +67,7 @@ def train(
         print(f"Loading pre-trained multi-head model from {pretrained_model_path}")
         try:
             checkpoint = torch.load(pretrained_model_path, map_location=torch.device("cpu"))
-            
+
             if checkpoint.get("model_type") == "multihead":
                 # New multi-head format
                 player_agent.load_model(pretrained_model_path)
@@ -77,11 +79,12 @@ def train(
             else:
                 print("⚠️  Warning: Pre-trained model format not recognized")
                 print("Continuing with random initialization...")
-            
+
             # Reduce initial epsilon since we start with a good policy
             player_agent.epsilon = min(player_agent.epsilon, 0.3)
             print(f"Reduced initial epsilon to {player_agent.epsilon} for pre-trained model")
-            
+
+
         except Exception as e:
             print(f"❌ Error loading pre-trained model: {e}")
             print("Continuing with random initialization...")
@@ -100,7 +103,7 @@ def train(
         # Load the checkpoint
         player_agent_checkpoint.load_model(config.checkpoint_path)
         player_agent = player_agent_checkpoint
-        player_agent.set_training_mode('q_learning')
+        player_agent.set_training_mode("q_learning")
 
         print(
             f"Checkpoint loaded with parameters: LR={config.ml_config.learning_rate}, "
@@ -136,8 +139,8 @@ def train(
     try:
         for episode in range(1, config.episodes + 1):
             # Ensure we're in Q-learning mode for RL training
-            player_agent.set_training_mode('q_learning')
-            
+            player_agent.set_training_mode("q_learning")
+
             # Reset the game
             game.reset()
             episode_reward = 0.0
@@ -236,12 +239,12 @@ def train(
             writer.add_scalar("Performance/hits_per_step", enemy_hits / max(1, step), episode)
 
             # Log learning rate from scheduler
-            if hasattr(player_agent, 'scheduler'):
+            if hasattr(player_agent, "scheduler"):
                 current_lr = player_agent.scheduler.get_last_lr()[0]
                 writer.add_scalar("Training/learning_rate", current_lr, episode)
 
             # Log histogram of Q-values if available
-            if hasattr(player_agent, "policy_net") and step > 0:
+            if hasattr(player_agent, "policy_net") and step > 0:  # noqa: SIM102
                 # Sample a batch of states for visualization
                 if len(player_agent.memory) > 32:
                     sample = player_agent.memory.sample(32)
@@ -253,9 +256,9 @@ def train(
 
             # Print progress
             lr_str = ""
-            if hasattr(player_agent, 'scheduler'):
+            if hasattr(player_agent, "scheduler"):
                 lr_str = f"- LR: {player_agent.scheduler.get_last_lr()[0]:.6f}"
-            
+
             print(
                 f"Episode {episode}/{config.episodes} - Steps: {step} "
                 f"- Reward: {episode_reward:.2f} "
@@ -263,7 +266,7 @@ def train(
                 f"- Epsilon: {player_agent.epsilon:.4f} "
                 f"{lr_str} "
                 f"- Enemy Hits: {enemy_hits} "
-                f"- Win: {'Yes' if episode_result.win else 'No'}"
+                f"- Win: {'Yes' if episode_result.win else 'No'}",
             )
 
             # Save model periodically
@@ -394,7 +397,7 @@ def evaluate(
     player_agent = MLAgent(is_training=False)
     player_agent.load_model(model_path)
     # Ensure we're in Q-learning mode for evaluation
-    player_agent.set_training_mode('q_learning')
+    player_agent.set_training_mode("q_learning")
     enemy_agent = RandomAgent()
 
     # Import game here to avoid circular imports
@@ -476,7 +479,12 @@ def evaluate(
             episode_details.append(episode_result)
 
             # Print progress
-            print(f"Episode {episode}/{episodes} - Steps: {step} - Reward: {episode_reward:.2f} - Win: {'Yes' if episode_result.win else 'No'}")
+            print(
+                f"Episode {episode}/{episodes}"
+                f"- Steps: {step}"
+                f"- Reward: {episode_reward:.2f}"
+                f"- Win: {'Yes' if episode_result.win else 'No'}",
+            )
 
     except KeyboardInterrupt:
         print("Evaluation interrupted by user")

@@ -15,7 +15,7 @@ class ImitationLearner:
         ml_config: MLAgentConfig,
         demonstrations_dir: str = "demonstrations",
         device: torch.device | None = None,
-    ):
+    ) -> None:
         self.ml_config = ml_config
         self.demonstrations_dir = demonstrations_dir
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -55,14 +55,18 @@ class ImitationLearner:
         # Create balanced data loader if requested
         if balance_actions:
             train_loader, val_loader = self._create_balanced_dataloaders(
-                dataset, batch_size, validation_split, balance_factor
+                dataset,
+                batch_size,
+                validation_split,
+                balance_factor,
             )
         else:
             # Standard train/val split
             val_size = int(len(dataset) * validation_split)
             train_size = len(dataset) - val_size
             train_dataset, val_dataset = torch.utils.data.random_split(
-                dataset, [train_size, val_size]
+                dataset,
+                [train_size, val_size],
             )
 
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -102,8 +106,12 @@ class ImitationLearner:
         print(f"Pre-training completed. Best validation accuracy: {best_val_accuracy:.3f}")
         return best_val_accuracy
 
-    def _create_balanced_dataloaders(
-        self, dataset, batch_size: int, validation_split: float, balance_factor: float
+    def _create_balanced_dataloaders(  # noqa: ANN202
+        self,
+        dataset,
+        batch_size: int,
+        validation_split: float,
+        balance_factor: float,
     ):
         # Calculate action frequencies
         action_counts = Counter()
@@ -153,9 +161,9 @@ class ImitationLearner:
         correct_predictions = 0
         total_samples = 0
 
-        for batch_idx, (states, actions) in enumerate(train_loader):
-            states = states.to(self.device)
-            actions = actions.to(self.device)
+        for _, (states, actions) in enumerate(train_loader):
+            states = states.to(self.device)  # noqa: PLW2901
+            actions = actions.to(self.device)  # noqa: PLW2901
 
             # Process entire batch at once
             self.agent.optimizer.zero_grad()
@@ -195,8 +203,8 @@ class ImitationLearner:
 
         with torch.no_grad():
             for states, actions in val_loader:
-                states = states.to(self.device)
-                actions = actions.to(self.device)
+                states = states.to(self.device)  # noqa: PLW2901
+                actions = actions.to(self.device)  # noqa: PLW2901
 
                 # Get action logits
                 action_logits = self.agent.policy_net.get_action_logits(states)
@@ -241,7 +249,8 @@ def pretrain_agent(
     if final_accuracy > 0:
         print(f"Pre-training successful! Model saved to {save_path}")
         print(
-            f"To use for RL training: python -m agentarena.training.train --pretrained-model {save_path}"
+            "To use for RL training:"
+            f"python -m agentarena.training.train --pretrained-model {save_path}",
         )
         return save_path
     print("Pre-training failed!")

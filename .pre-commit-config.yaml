@@ -26,14 +26,6 @@ repos:
       args: [--fix, --exit-non-zero-on-fix]
     - id: ruff-format
 
--   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
-    hooks:
-    -   id: mypy
-        additional_dependencies: [types-pyyaml]
-        args: [--ignore-missing-imports, --warn-redundant-casts, --warn-unused-ignores, --disallow-any-generics, --disallow-untyped-defs, --no-implicit-reexport]
-        exclude: ^(docs|tests)/
-
 -   repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:

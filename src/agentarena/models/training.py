@@ -1,8 +1,8 @@
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
-from enum import Enum
 
 
 class RewardType(Enum):
@@ -41,7 +41,8 @@ class MLAgentConfig(BaseModel):
     batch_size: int = Field(64, description="Batch size for training")
     memory_capacity: int = Field(10000, description="Capacity of replay buffer")
     target_update_frequency: int = Field(
-        10, description="How often to update target network (in episodes)"
+        10,
+        description="How often to update target network (in episodes)",
     )
 
 

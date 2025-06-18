@@ -13,7 +13,6 @@ from agentarena.models.training import Experience, MLAgentConfig
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-
 MAX_RECENT_ACTIONS: int = 100
 MAX_ENEMIES = 3
 MAX_BULLETS = 12
@@ -320,9 +319,9 @@ class MLAgent(Agent):
             + len(wall_features)
         )
 
-        assert len(state) == expected_size, (
-            f"State size mismatch: got {len(state)}, expected {expected_size}"
-        )
+        assert (
+            len(state) == expected_size
+        ), f"State size mismatch: got {len(state)}, expected {expected_size}"
 
         return np.array(state, dtype=np.float32)
 

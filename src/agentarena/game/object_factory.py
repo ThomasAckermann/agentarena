@@ -60,7 +60,7 @@ class ObjectFactory:
     def create_enemies(self, count: int) -> list[Player]:
         enemies = []
 
-        for i in range(count):
+        for _ in range(count):
             enemy_position = [
                 random.randint(
                     2 * self.config.block_width,

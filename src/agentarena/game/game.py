@@ -139,14 +139,14 @@ class Game:
                 self.score,
             )
         return self.object_factory.create_enemy_observation(
-                agent_id,
-                self.player,
-                self.enemies,
-                self.bullets,
-                self.level.walls,
-                self.game_time,
-                self.score,
-            )
+            agent_id,
+            self.player,
+            self.enemies,
+            self.bullets,
+            self.level.walls,
+            self.game_time,
+            self.score,
+        )
 
     def update(self) -> None:
         """Update game state for the current frame."""

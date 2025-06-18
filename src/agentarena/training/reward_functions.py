@@ -23,9 +23,9 @@ def calculate_reward(
 ) -> float:
     if reward_type == RewardType.BASIC:
         return _basic_reward(events, observation, previous_observation)
-    elif reward_type == RewardType.ADVANCED:
+    if reward_type == RewardType.ADVANCED:
         return _advanced_reward(events, observation, previous_observation)
-    elif reward_type == RewardType.ENHANCED:
+    if reward_type == RewardType.ENHANCED:
         return _enhanced_reward(
             events,
             observation,
@@ -39,8 +39,8 @@ def calculate_reward(
 
 def _basic_reward(
     events: list[GameEvent],
-    observation: GameObservation,
-    previous_observation: GameObservation | None = None,
+    observation: GameObservation,  # noqa: ARG001
+    previous_observation: GameObservation | None = None,  # noqa: ARG001
 ) -> float:
     """
     Basic reward function focusing on hits and survival.
@@ -240,9 +240,15 @@ def calculate_tactical_reward(
                 if dot_product > 0:
                     danger_level += dot_product * (1 - (distance / 150))
 
-    if previous_observation and hasattr(previous_observation, "bullets_near_player"):
-        if bullets_near_player < len(previous_observation.bullets_near_player()):
-            reward += 0.3 * (len(previous_observation.bullets_near_player()) - bullets_near_player)
+    if (
+        previous_observation
+        and hasattr(
+            previous_observation,
+            "bullets_near_player",
+        )
+        and bullets_near_player < len(previous_observation.bullets_near_player())
+    ):
+        reward += 0.3 * (len(previous_observation.bullets_near_player()) - bullets_near_player)
 
     # Penalty based on danger level
     reward -= danger_level * 0.2
@@ -250,13 +256,13 @@ def calculate_tactical_reward(
     return reward
 
 
-def calculate_strategic_reward(observation, previous_observation):
+def calculate_strategic_reward(observation, previous_observation):  # noqa: ARG001
     reward = 0
 
     # Reward for maintaining line of sight to multiple enemies
     if observation.enemies:
         visible_enemies = 0
-        for enemy in observation.enemies:
+        for _ in observation.enemies:
             # Simple line of sight check (could be more complex with ray casting)
             visible_enemies += 1
 
@@ -283,7 +289,7 @@ def calculate_strategic_reward(observation, previous_observation):
     return reward
 
 
-def calculate_learning_reward(observation, agent):
+def calculate_learning_reward(observation, agent):  # noqa: ARG001
     reward = 0
 
     if not hasattr(agent, "action_history"):

@@ -14,10 +14,12 @@ class GameConfig(BaseModel):
 
     # Agent types
     player_agent: Literal["manual", "rule_based", "ml"] = Field(
-        "manual", description="Type of agent controlling the player"
+        "manual",
+        description="Type of agent controlling the player",
     )
     enemy_agent: Literal["manual", "rule_based", "ml"] = Field(
-        "rule_based", description="Type of agent controlling the enemies"
+        "rule_based",
+        description="Type of agent controlling the enemies",
     )
 
     # Game parameters
@@ -43,7 +45,9 @@ class GameConfig(BaseModel):
         description="Total width of the display window in pixels",
     )
     display_height: int = Field(
-        600, gt=0, description="Total height of the display window in pixels"
+        600,
+        gt=0,
+        description="Total height of the display window in pixels",
     )
     fps: int = Field(
         30,
@@ -52,7 +56,7 @@ class GameConfig(BaseModel):
         description="Fps - affects animation smoothness and game speed",
     )
     headless: bool = Field(
-        False,
+        False,  # noqa: FBT003
         description="Whether to run the game without graphical display",
     )
     bullet_speed: int = Field(
@@ -68,13 +72,15 @@ class GameConfig(BaseModel):
 
     # Optional ML model path
     ml_model_path: Path | None = Field(
-        None, description="Path to the ML model file (if using ML agent)"
+        None,
+        description="Path to the ML model file (if using ML agent)",
     )
 
     # Additional options
     enable_power_ups: bool = False
     difficulty: Literal["easy", "medium", "hard"] = Field(
-        "medium", description="Game difficulty level"
+        "medium",
+        description="Game difficulty level",
     )
 
     @field_validator("ml_model_path")

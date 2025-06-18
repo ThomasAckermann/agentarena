@@ -6,7 +6,6 @@ from agentarena.models.config import GameConfig
 
 
 class RenderingSystem:
-
     def __init__(
         self,
         screen: pygame.Surface,
@@ -27,13 +26,17 @@ class RenderingSystem:
         for health in range(11):  # Assuming max health is 10
             self.health_texts[health] = self.font.render(
                 f"Health: {health}",
-                True,
+                True,  # noqa: FBT003
                 (255, 255, 255),
             )
         self.ammo_texts = {}
         for ammo in range(11):
-            self.ammo_texts[ammo] = self.font.render(f"Ammo: {ammo}", True, (255, 255, 255),)
-        self.score_text = self.font.render("Score: 0", True, (255, 255, 255))
+            self.ammo_texts[ammo] = self.font.render(
+                f"Ammo: {ammo}",
+                True,  # noqa: FBT003
+                (255, 255, 255),
+            )
+        self.score_text = self.font.render("Score: 0", True, (255, 255, 255))  # noqa: FBT003
 
     def get_direction_from_vector(self, direction_vector) -> Direction:
         if direction_vector is None or (direction_vector[0] == 0 and direction_vector[1] == 0):
@@ -114,14 +117,14 @@ class RenderingSystem:
 
         self.score_text = self.font.render(
             f"Score: {score}",
-            True,
+            True,  # noqa: FBT003
             (255, 255, 255),
         )
         self.screen.blit(self.score_text, (10, 50))
 
         time_text = self.font.render(
             f"Time: {game_time:.1f}s",
-            True,
+            True,  # noqa: FBT003
             (255, 255, 255),
         )
         self.screen.blit(time_text, (10, 70))

@@ -5,11 +5,11 @@ This agent provides more balanced action distribution and improved pathfinding.
 
 import math
 import random
-from typing import Optional, Tuple, List
 
 from agentarena.agent.agent import Agent
 from agentarena.models.action import Action, Direction
-from agentarena.models.observations import GameObservation, BulletObservation, EnemyObservation
+from agentarena.models.observations import EnemyObservation, GameObservation
+
 
 
 class RuleBasedAgent(Agent):
@@ -44,9 +44,9 @@ class RuleBasedAgent(Agent):
         self.exploration_radius = 120
 
         # State tracking
-        self.last_position: Optional[Tuple[float, float]] = None
+        self.last_position: tuple[float, float] | None = None
         self.stuck_counter = 0
-        self.current_waypoint: Optional[Tuple[float, float]] = None
+        self.current_waypoint: tuple[float, float] | None = None
         self.frames_since_last_enemy_sight = 0
         self.exploration_targets = []
         self.frame_count = 0
@@ -102,8 +102,8 @@ class RuleBasedAgent(Agent):
 
         # Priority 4: Exploration when no enemies visible
         return self._get_exploration_action(observation)
-
-    def _get_emergency_dodge_action(self, observation: GameObservation) -> Optional[Action]:
+      
+    def _get_emergency_dodge_action(self, observation: GameObservation) -> Action | None:
         """
         Emergency dodging for immediate bullet threats.
         """
@@ -159,10 +159,10 @@ class RuleBasedAgent(Agent):
 
         return None
 
-    def _get_balanced_shooting_action(self, observation: GameObservation) -> Optional[Action]:
-        """
-        More aggressive and balanced shooting behavior.
-        """
+    def _get_balanced_shooting_action(
+        self,
+        observation: GameObservation,
+    ) -> Action | None:
         if not observation.enemies or observation.player.ammunition == 0:
             return None
 
@@ -184,12 +184,14 @@ class RuleBasedAgent(Agent):
 
             # Calculate direction to enemy
             direction_to_enemy = self._normalize_vector(
-                self._get_vector((player.x, player.y), (enemy.x, enemy.y))
+                self._get_vector((player.x, player.y), (enemy.x, enemy.y)),
             )
 
             # Check line of sight
             has_los = self._has_clear_line_of_sight(
-                observation, (player.x, player.y), (enemy.x, enemy.y)
+                observation,
+                (player.x, player.y),
+                (enemy.x, enemy.y),
             )
 
             # Calculate shooting score
@@ -237,13 +239,12 @@ class RuleBasedAgent(Agent):
             if random.random() < shoot_probability:
                 self.last_shot_time = self.frame_count
                 return Action(direction=self._vector_to_direction(direction), is_shooting=True)
-            else:
-                # Move toward enemy for positioning
-                return Action(direction=self._vector_to_direction(direction), is_shooting=False)
+            # Move toward enemy for positioning
+            return Action(direction=self._vector_to_direction(direction), is_shooting=False)
 
         return None
 
-    def _get_strategic_movement_action(self, observation: GameObservation) -> Optional[Action]:
+    def _get_strategic_movement_action(self, observation: GameObservation) -> Action | None:
         """
         Strategic movement including improved pathfinding.
         """
@@ -259,7 +260,8 @@ class RuleBasedAgent(Agent):
         )
 
         distance_to_enemy = self._calculate_distance(
-            (player.x, player.y), (closest_enemy.x, closest_enemy.y)
+            (player.x, player.y),
+            (closest_enemy.x, closest_enemy.y),
         )
 
         # If too close, try to back away while maintaining sight
@@ -268,12 +270,15 @@ class RuleBasedAgent(Agent):
             for retreat_dir in retreat_directions:
                 if self._evaluate_movement_direction(observation, retreat_dir) > 0.3:
                     return Action(
-                        direction=self._vector_to_direction(retreat_dir), is_shooting=False
+                        direction=self._vector_to_direction(retreat_dir),
+                        is_shooting=False,
                     )
 
         # If enemy is far or behind wall, use pathfinding
         elif distance_to_enemy > self.attack_range or not self._has_clear_line_of_sight(
-            observation, (player.x, player.y), (closest_enemy.x, closest_enemy.y)
+            observation,
+            (player.x, player.y),
+            (closest_enemy.x, closest_enemy.y),
         ):
             pathfinding_action = self._get_pathfinding_action(observation, closest_enemy)
             if pathfinding_action:
@@ -287,8 +292,10 @@ class RuleBasedAgent(Agent):
         return None
 
     def _get_pathfinding_action(
-        self, observation: GameObservation, target_enemy: EnemyObservation
-    ) -> Optional[Action]:
+        self,
+        observation: GameObservation,
+        target_enemy: EnemyObservation,
+    ) -> Action | None:
         """
         Improved pathfinding that can navigate around walls effectively.
         """
@@ -310,23 +317,25 @@ class RuleBasedAgent(Agent):
         if self.current_waypoint:
             # Move toward current waypoint
             direction_to_waypoint = self._normalize_vector(
-                self._get_vector((player.x, player.y), self.current_waypoint)
+                self._get_vector((player.x, player.y), self.current_waypoint),
             )
 
             if self._evaluate_movement_direction(observation, direction_to_waypoint) > 0.1:
                 return Action(
-                    direction=self._vector_to_direction(direction_to_waypoint), is_shooting=False
+                    direction=self._vector_to_direction(direction_to_waypoint),
+                    is_shooting=False,
                 )
-            else:
-                # Waypoint is blocked, find a new one
-                self.current_waypoint = None
+            # Waypoint is blocked, find a new one
+            self.current_waypoint = None
 
         # Fallback: wall-following behavior
         return self._get_wall_following_action(observation, target_pos)
 
     def _find_best_waypoint(
-        self, observation: GameObservation, target_pos: Tuple[float, float]
-    ) -> Optional[Tuple[float, float]]:
+        self,
+        observation: GameObservation,
+        target_pos: tuple[float, float],
+    ) -> tuple[float, float] | None:
         """
         Find the best waypoint for pathfinding using A* inspired approach.
         """
@@ -377,9 +386,9 @@ class RuleBasedAgent(Agent):
     def _score_waypoint(
         self,
         observation: GameObservation,
-        player_pos: Tuple[float, float],
-        waypoint: Tuple[float, float],
-        target_pos: Tuple[float, float],
+        player_pos: tuple[float, float],
+        waypoint: tuple[float, float],
+        target_pos: tuple[float, float],
     ) -> float:
         """
         Score a waypoint for pathfinding quality.
@@ -425,8 +434,10 @@ class RuleBasedAgent(Agent):
         return score
 
     def _get_wall_following_action(
-        self, observation: GameObservation, target_pos: Tuple[float, float]
-    ) -> Optional[Action]:
+        self,
+        observation: GameObservation,
+        target_pos: tuple[float, float],
+    ) -> Action | None:
         """
         Wall-following behavior for when pathfinding fails.
         """
@@ -457,7 +468,7 @@ class RuleBasedAgent(Agent):
 
             # Choose the perpendicular direction that gets us closer to target
             target_direction = self._normalize_vector(
-                self._get_vector((player.x, player.y), target_pos)
+                self._get_vector((player.x, player.y), target_pos),
             )
 
             best_direction = None
@@ -474,23 +485,25 @@ class RuleBasedAgent(Agent):
 
             if best_direction and best_alignment > 0:
                 return Action(
-                    direction=self._vector_to_direction(best_direction), is_shooting=False
+                    direction=self._vector_to_direction(best_direction),
+                    is_shooting=False,
                 )
 
         # Fallback: try moving toward target with some randomness
         target_direction = self._normalize_vector(
-            self._get_vector((player.x, player.y), target_pos)
+            self._get_vector((player.x, player.y), target_pos),
         )
 
         # Add some randomness for variety
         random_offset = (random.uniform(-0.5, 0.5), random.uniform(-0.5, 0.5))
         modified_direction = self._normalize_vector(
-            (target_direction[0] + random_offset[0], target_direction[1] + random_offset[1])
+            (target_direction[0] + random_offset[0], target_direction[1] + random_offset[1]),
         )
 
         if self._evaluate_movement_direction(observation, modified_direction) > 0.1:
             return Action(
-                direction=self._vector_to_direction(modified_direction), is_shooting=False
+                direction=self._vector_to_direction(modified_direction),
+                is_shooting=False,
             )
 
         return None
@@ -561,8 +574,9 @@ class RuleBasedAgent(Agent):
         return Action(direction=self._vector_to_direction(blended_direction), is_shooting=False)
 
     def _generate_exploration_targets(
-        self, observation: GameObservation
-    ) -> List[Tuple[float, float]]:
+        self,
+        observation: GameObservation,
+    ) -> list[tuple[float, float]]:
         """
         Generate points of interest for exploration.
         """
@@ -592,8 +606,10 @@ class RuleBasedAgent(Agent):
         return targets
 
     def _get_retreat_directions(
-        self, observation: GameObservation, enemy: EnemyObservation
-    ) -> List[Tuple[float, float]]:
+        self,
+        observation: GameObservation,
+        enemy: EnemyObservation,
+    ) -> list[tuple[float, float]]:
         """
         Get good retreat directions when too close to enemy.
         """
@@ -601,7 +617,7 @@ class RuleBasedAgent(Agent):
 
         # Primary retreat: directly away from enemy
         away_from_enemy = self._normalize_vector(
-            self._get_vector((enemy.x, enemy.y), (player.x, player.y))
+            self._get_vector((enemy.x, enemy.y), (player.x, player.y)),
         )
 
         # Secondary retreats: perpendicular to enemy
@@ -610,13 +626,16 @@ class RuleBasedAgent(Agent):
 
         # Diagonal retreats
         diagonal_left = self._normalize_vector(
-            (away_from_enemy[0] + perpendicular_left[0], away_from_enemy[1] + perpendicular_left[1])
+            (
+                away_from_enemy[0] + perpendicular_left[0],
+                away_from_enemy[1] + perpendicular_left[1],
+            ),
         )
         diagonal_right = self._normalize_vector(
             (
                 away_from_enemy[0] + perpendicular_right[0],
                 away_from_enemy[1] + perpendicular_right[1],
-            )
+            ),
         )
 
         return [
@@ -628,8 +647,10 @@ class RuleBasedAgent(Agent):
         ]
 
     def _get_flanking_action(
-        self, observation: GameObservation, enemy: EnemyObservation
-    ) -> Optional[Action]:
+        self,
+        observation: GameObservation,
+        enemy: EnemyObservation,
+    ) -> Action | None:
         """
         Try to flank the enemy for better positioning.
         """
@@ -637,7 +658,7 @@ class RuleBasedAgent(Agent):
 
         # Calculate flanking directions
         to_enemy = self._normalize_vector(
-            self._get_vector((player.x, player.y), (enemy.x, enemy.y))
+            self._get_vector((player.x, player.y), (enemy.x, enemy.y)),
         )
 
         flank_left = (-to_enemy[1], to_enemy[0])
@@ -657,14 +678,16 @@ class RuleBasedAgent(Agent):
         # Choose best flanking direction
         if left_score > 0.4 and left_score >= right_score:
             return Action(direction=self._vector_to_direction(flank_left), is_shooting=False)
-        elif right_score > 0.4:
+        if right_score > 0.4:
             return Action(direction=self._vector_to_direction(flank_right), is_shooting=False)
 
         return None
 
     # Utility methods
     def _evaluate_dodge_direction(
-        self, observation: GameObservation, direction: Tuple[float, float]
+        self,
+        observation: GameObservation,
+        direction: tuple[float, float],
     ) -> float:
         """
         Evaluate how good a direction is for dodging.
@@ -701,7 +724,9 @@ class RuleBasedAgent(Agent):
         return max(0.0, score)
 
     def _evaluate_movement_direction(
-        self, observation: GameObservation, direction: Tuple[float, float]
+        self,
+        observation: GameObservation,
+        direction: tuple[float, float],
     ) -> float:
         """
         Evaluate how good a movement direction is.
@@ -736,7 +761,10 @@ class RuleBasedAgent(Agent):
         return max(0.0, score)
 
     def _has_clear_line_of_sight(
-        self, observation: GameObservation, start: Tuple[float, float], end: Tuple[float, float]
+        self,
+        observation: GameObservation,
+        start: tuple[float, float],
+        end: tuple[float, float],
     ) -> bool:
         """
         Check line of sight between two points.
@@ -764,31 +792,36 @@ class RuleBasedAgent(Agent):
         return True
 
     def _is_path_clear(
-        self, observation: GameObservation, start: Tuple[float, float], end: Tuple[float, float]
+        self,
+        observation: GameObservation,
+        start: tuple[float, float],
+        end: tuple[float, float],
     ) -> bool:
         """
         Check if path is clear for movement.
         """
         return self._has_clear_line_of_sight(observation, start, end)
 
-    def _calculate_distance(self, pos1: Tuple[float, float], pos2: Tuple[float, float]) -> float:
+    def _calculate_distance(self, pos1: tuple[float, float], pos2: tuple[float, float]) -> float:
         """Calculate Euclidean distance."""
         return math.sqrt((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2)
 
     def _get_vector(
-        self, from_pos: Tuple[float, float], to_pos: Tuple[float, float]
-    ) -> Tuple[float, float]:
+        self,
+        from_pos: tuple[float, float],
+        to_pos: tuple[float, float],
+    ) -> tuple[float, float]:
         """Get vector from one position to another."""
         return (to_pos[0] - from_pos[0], to_pos[1] - from_pos[1])
 
-    def _normalize_vector(self, vector: Tuple[float, float]) -> Tuple[float, float]:
+    def _normalize_vector(self, vector: tuple[float, float]) -> tuple[float, float]:
         """Normalize vector to unit length."""
         magnitude = math.sqrt(vector[0] ** 2 + vector[1] ** 2)
         if magnitude == 0:
             return (0, 0)
         return (vector[0] / magnitude, vector[1] / magnitude)
 
-    def _vector_to_direction(self, vector: Tuple[float, float]) -> Direction:
+    def _vector_to_direction(self, vector: tuple[float, float]) -> Direction:  # noqa: PLR0911
         """Convert a normalized vector to the closest Direction enum."""
         x, y = vector
 
@@ -802,27 +835,26 @@ class RuleBasedAgent(Agent):
         # Pure vertical movement
         if abs(x) < threshold and y < -threshold:
             return Direction.UP
-        elif abs(x) < threshold and y > threshold:
+        if abs(x) < threshold and y > threshold:
             return Direction.DOWN
         # Pure horizontal movement
-        elif x < -threshold and abs(y) < threshold:
+        if x < -threshold and abs(y) < threshold:
             return Direction.LEFT
-        elif x > threshold and abs(y) < threshold:
+        if x > threshold and abs(y) < threshold:
             return Direction.RIGHT
         # Diagonal movement
-        elif x < -threshold and y < -threshold:
+        if x < -threshold and y < -threshold:
             return Direction.TOP_LEFT
-        elif x > threshold and y < -threshold:
+        if x > threshold and y < -threshold:
             return Direction.TOP_RIGHT
-        elif x < -threshold and y > threshold:
+        if x < -threshold and y > threshold:
             return Direction.DOWN_LEFT
-        elif x > threshold and y > threshold:
+        if x > threshold and y > threshold:
             return Direction.DOWN_RIGHT
-        else:
-            # Default fallback for edge cases
-            return Direction.DOWN
+        # Default fallback for edge cases
+        return Direction.DOWN
 
-    def _direction_to_vector(self, direction: Direction) -> Tuple[float, float]:
+    def _direction_to_vector(self, direction: Direction) -> tuple[float, float]:
         """Convert Direction enum to normalized vector."""
         direction_vectors = {
             Direction.UP: (0, -1),

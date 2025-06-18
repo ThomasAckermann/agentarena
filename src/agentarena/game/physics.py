@@ -23,7 +23,7 @@ class PhysicsSystem:
 
     def add_to_collision_grid(self, obj, obj_type: str) -> None:
         if obj.x is None or obj.y is None:
-            return None
+            return
 
         grid_x1 = max(0, int(obj.x // self.grid_size))
         grid_y1 = max(0, int(obj.y // self.grid_size))
@@ -142,7 +142,7 @@ class PhysicsSystem:
                 entity.cooldown += 1 * self.config.fps
                 entity.is_reloading = True
 
-    def move_bullets(self, bullets, walls, config, events, game_time, dt) -> None:
+    def move_bullets(self, bullets, walls, config, events, game_time, dt) -> None:  # noqa: ARG002
         screen_rect = pygame.Rect(
             0,
             0,

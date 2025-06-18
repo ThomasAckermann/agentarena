@@ -96,7 +96,7 @@ class WallModel(EntityModel):
 
     entity_type: Literal["wall"] = "wall"
     destructible: bool = Field(
-        False,
+        False,  # noqa: FBT003
         description="Whether the wall can be destroyed",
     )
     health: int | None = Field(
@@ -133,4 +133,4 @@ class PowerUpModel(EntityModel):
 
 
 # Union type for all entity data models
-GameEntityModel = Union[PlayerModel, ProjectileModel, WallModel, PowerUpModel]
+GameEntityModel = Union[PlayerModel, ProjectileModel, WallModel, PowerUpModel]  # noqa: UP007

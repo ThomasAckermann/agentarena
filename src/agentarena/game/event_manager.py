@@ -15,7 +15,6 @@ class EventManager:
         pass
 
     def create_bullet_fired_event(self, events, game_time, owner_id, direction, position) -> None:
-
         events.append(
             BulletFiredEvent(
                 timestamp=game_time,

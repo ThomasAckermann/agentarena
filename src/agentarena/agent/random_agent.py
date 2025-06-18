@@ -47,6 +47,7 @@ class RandomAgent(Agent):
         Returns:
             Action: A randomly selected action
         """
+        del observation
         # Random 50% chance of shooting
         is_shooting = random.choice([True, False])
 

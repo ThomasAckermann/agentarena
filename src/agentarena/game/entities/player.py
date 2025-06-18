@@ -16,7 +16,7 @@ class Player(Entity):
         cooldown: int = 0,
         ammunition: int = 3,
         is_reloading: bool = False,
-    ):
+    ) -> None:
         super().__init__(width=width, height=height, x=x, y=y)
         self.orientation: list[int] | None = orientation
         self.health: int = health
