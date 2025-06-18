@@ -85,7 +85,7 @@ class ImitationLearner:
             print(
                 f"Epoch {epoch + 1}/{epochs} - "
                 f"Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy:.3f} - "
-                f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.3f}",
+                f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.3f}"
             )
 
             if writer:

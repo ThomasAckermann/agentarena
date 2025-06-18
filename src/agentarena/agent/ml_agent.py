@@ -379,7 +379,7 @@ class MLAgent(Agent):
 
         if self.is_training:
             self.recent_actions.append(action_idx)
-            if len(self.recent_actions) > 100:
+            if len(self.recent_actions) > 100:  # noqa: PLR2004
                 self.recent_actions.pop(0)
 
         self.policy_net.train(training_mode)
@@ -409,7 +409,7 @@ class MLAgent(Agent):
         if not self.is_training or self.last_state is None or self.last_action is None:
             return
 
-        if len(self.recent_actions) > 20:
+        if len(self.recent_actions) > 20:  # noqa: PLR2004
             action_counts = {}
             for a in self.recent_actions:
                 action_counts[a] = action_counts.get(a, 0) + 1

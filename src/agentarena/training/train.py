@@ -59,6 +59,7 @@ def train(
     # Set to Q-learning mode for RL training
     player_agent.set_training_mode("q_learning")
 
+
     enemy_agent = RandomAgent()
 
     # Handle pre-trained model loading
@@ -82,6 +83,7 @@ def train(
             # Reduce initial epsilon since we start with a good policy
             player_agent.epsilon = min(player_agent.epsilon, 0.3)
             print(f"Reduced initial epsilon to {player_agent.epsilon} for pre-trained model")
+
 
         except Exception as e:
             print(f"❌ Error loading pre-trained model: {e}")

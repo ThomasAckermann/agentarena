@@ -11,6 +11,7 @@ from agentarena.models.action import Action, Direction
 from agentarena.models.observations import EnemyObservation, GameObservation
 
 
+
 class RuleBasedAgent(Agent):
     """
     Balanced rule-based agent that provides good demonstrations for ML training.
@@ -101,7 +102,7 @@ class RuleBasedAgent(Agent):
 
         # Priority 4: Exploration when no enemies visible
         return self._get_exploration_action(observation)
-
+      
     def _get_emergency_dodge_action(self, observation: GameObservation) -> Action | None:
         """
         Emergency dodging for immediate bullet threats.
