@@ -13,11 +13,16 @@ def main():
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size for training")
     parser.add_argument(
-        "--learning-rate", type=float, default=0.001, help="Learning rate for training"
+        "--learning-rate",
+        type=float,
+        default=0.001,
+        help="Learning rate for training",
     )
     parser.add_argument("--output", default="models/pretrained_agent.pt", help="Output model path")
     parser.add_argument(
-        "--tensorboard-dir", default="runs/pretraining", help="TensorBoard log directory"
+        "--tensorboard-dir",
+        default="runs/pretraining",
+        help="TensorBoard log directory",
     )
     parser.add_argument(
         "--balance-actions",

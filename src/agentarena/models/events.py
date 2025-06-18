@@ -47,7 +47,8 @@ class EntityDestroyedEvent(EventBase):
     entity_id: str = Field(..., description="ID of the destroyed entity")
     entity_type: str = Field(..., description="Type of the destroyed entity")
     position: tuple[float, float] = Field(
-        ..., description="Position where the entity was destroyed"
+        ...,
+        description="Position where the entity was destroyed",
     )
 
     def is_enemy_destroyed(self) -> bool:
@@ -102,7 +103,7 @@ class GameStateChangedEvent(EventBase):
 
 
 # Union type for all possible events
-GameEvent = Union[
+GameEvent = Union[  # noqa: UP007
     PlayerHitEvent,
     EnemyHitEvent,
     EntityDestroyedEvent,

@@ -13,7 +13,6 @@ from agentarena.models.training import Experience, MLAgentConfig
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-
 MAX_RECENT_ACTIONS: int = 100
 MAX_ENEMIES = 3
 MAX_BULLETS = 12
@@ -320,9 +319,9 @@ class MLAgent(Agent):
             + len(wall_features)
         )
 
-        assert len(state) == expected_size, (
-            f"State size mismatch: got {len(state)}, expected {expected_size}"
-        )
+        assert (
+            len(state) == expected_size
+        ), f"State size mismatch: got {len(state)}, expected {expected_size}"
 
         return np.array(state, dtype=np.float32)
 
@@ -380,7 +379,7 @@ class MLAgent(Agent):
 
         if self.is_training:
             self.recent_actions.append(action_idx)
-            if len(self.recent_actions) > 100:  # noqa: PLR2004
+            if len(self.recent_actions) > 100:
                 self.recent_actions.pop(0)
 
         self.policy_net.train(training_mode)
@@ -410,7 +409,7 @@ class MLAgent(Agent):
         if not self.is_training or self.last_state is None or self.last_action is None:
             return
 
-        if len(self.recent_actions) > 20:  # noqa: PLR2004
+        if len(self.recent_actions) > 20:
             action_counts = {}
             for a in self.recent_actions:
                 action_counts[a] = action_counts.get(a, 0) + 1

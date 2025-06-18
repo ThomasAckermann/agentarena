@@ -39,5 +39,6 @@ class Agent:
         Raises:
             NotImplementedError: Must be implemented by subclasses
         """
+        del observation
         msg = "Agent subclasses must implement get_action"
         raise NotImplementedError(msg)
