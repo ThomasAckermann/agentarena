@@ -74,279 +74,50 @@ class PrioritizedReplay:
 
 
 class PolicyNetwork(nn.Module):
-    def __init__(self, input_size: int, output_size: int, mode: str = "q_learning") -> None:  # noqa: ARG002
-        super().__init__()
-        self.mode = mode
-
-        # Feature dimensions
-        self.PLAYER_FEATURES = 3
-        self.ENEMY_FEATURES = 7
-        self.BULLET_FEATURES = 5
-        self.WALL_FEATURES_PER_WALL = 2
-        self.MAX_ENEMIES = 3
-        self.MAX_BULLETS = 12
-        self.MAX_WALLS = 120
-
-        # Smaller embedding dimension for stability
-        self.embed_dim = 64
-
-        # Feature embedders with proper initialization and normalization
-        self.player_embedder = nn.Sequential(
-            nn.Linear(self.PLAYER_FEATURES, 32),
-            nn.LayerNorm(32),
-            nn.LeakyReLU(),
-            nn.Linear(32, self.embed_dim),
-            nn.LayerNorm(self.embed_dim),
-        )
-
-        self.enemy_embedder = nn.Sequential(
-            nn.Linear(self.ENEMY_FEATURES, 32),
-            nn.LayerNorm(32),
-            nn.LeakyReLU(),
-            nn.Linear(32, self.embed_dim),
-            nn.LayerNorm(self.embed_dim),
-        )
-
-        self.bullet_embedder = nn.Sequential(
-            nn.Linear(self.BULLET_FEATURES, 32),
-            nn.LayerNorm(32),
-            nn.LeakyReLU(),
-            nn.Linear(32, self.embed_dim),
-            nn.LayerNorm(self.embed_dim),
-        )
-
-        self.wall_embedder = nn.Sequential(
-            nn.Linear(self.WALL_FEATURES_PER_WALL, 16),
-            nn.LayerNorm(16),
-            nn.LeakyReLU(),
-            nn.Linear(16, self.embed_dim),
-            nn.LayerNorm(self.embed_dim),
-        )
-
-        # Learnable temperature for attention scaling (instead of fixed sqrt(d))
-        self.temperature = nn.Parameter(torch.ones(1) * np.sqrt(self.embed_dim))
-
-        # Feature aggregation with proper normalization
-        self.feature_aggregator = nn.Sequential(
-            nn.Linear(self.embed_dim * 4, 256),
-            nn.LayerNorm(256),
-            nn.LeakyReLU(),
-            nn.Dropout(0.1),  # Reduced dropout
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
-            nn.LeakyReLU(),
-        )
-
-        # Output heads with smaller initial weights
-        self.q_head = nn.Sequential(nn.Linear(128, 64), nn.LeakyReLU(), nn.Linear(64, output_size))
-
-        self.action_head = nn.Sequential(
-            nn.Linear(128, 64),
-            nn.LeakyReLU(),
-            nn.Linear(64, output_size),
-        )
-
-        self._initialize_weights()
-
-    def _initialize_weights(self) -> None:
-        """Careful initialization to prevent NaN"""
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                # Use smaller initialization for better stability
-                nn.init.xavier_uniform_(module.weight, gain=0.5)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
-            elif isinstance(module, nn.LayerNorm):
-                nn.init.constant_(module.bias, 0.0)
-                nn.init.constant_(module.weight, 1.0)
-
-    def safe_attention(self, query, key, value, mask=None):
-        """Numerically stable attention computation"""
-        # Ensure inputs are finite
-        if not torch.isfinite(query).all():
-            query = torch.nan_to_num(query, nan=0.0, posinf=1.0, neginf=-1.0)
-        if not torch.isfinite(key).all():
-            key = torch.nan_to_num(key, nan=0.0, posinf=1.0, neginf=-1.0)
-        if not torch.isfinite(value).all():
-            value = torch.nan_to_num(value, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        # Compute attention scores with learnable temperature
-        scores = torch.matmul(query, key.transpose(-2, -1)) / torch.clamp(
-            self.temperature,
-            min=1e-6,
-        )
-
-        # Apply mask if provided
-        if mask is not None:
-            scores = scores.masked_fill(mask.unsqueeze(1), float("-inf"))
-
-        # Numerical stability: subtract max for softmax
-        scores_max = scores.max(dim=-1, keepdim=True)[0]
-        scores = scores - scores_max
-
-        # Apply softmax with numerical stability
-        attn_weights = F.softmax(scores, dim=-1)
-
-        # Check for NaN in attention weights
-        if not torch.isfinite(attn_weights).all():
-            seq_len = attn_weights.size(-1)
-            attn_weights = torch.ones_like(attn_weights) / seq_len
-
-        # Apply attention
-        return torch.matmul(attn_weights, value)
-
-    def forward(self, x: torch.Tensor, mode: str = "q_learning") -> torch.Tensor:
-        # Check input for NaN
-        if not torch.isfinite(x).all():
-            print("Warning: NaN in input, clipping values")
-            x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        batch_size = x.shape[0]
-
-        # Parse input features
-        idx = 0
-        player_features = x[:, idx : idx + self.PLAYER_FEATURES]
-        idx += self.PLAYER_FEATURES
-
-        enemy_features = x[:, idx : idx + (self.MAX_ENEMIES * self.ENEMY_FEATURES)]
-        enemy_features = enemy_features.view(batch_size, self.MAX_ENEMIES, self.ENEMY_FEATURES)
-        idx += self.MAX_ENEMIES * self.ENEMY_FEATURES
-
-        bullet_features = x[:, idx : idx + (self.MAX_BULLETS * self.BULLET_FEATURES)]
-        bullet_features = bullet_features.view(batch_size, self.MAX_BULLETS, self.BULLET_FEATURES)
-        idx += self.MAX_BULLETS * self.BULLET_FEATURES
-
-        wall_features = x[:, idx : idx + (self.MAX_WALLS * self.WALL_FEATURES_PER_WALL)]
-        wall_features = wall_features.view(batch_size, self.MAX_WALLS, self.WALL_FEATURES_PER_WALL)
-
-        # Embed features
-        player_embed = self.player_embedder(player_features).unsqueeze(1)  # [B, 1, embed_dim]
-        enemy_embeds = self.enemy_embedder(enemy_features)  # [B, max_enemies, embed_dim]
-        bullet_embeds = self.bullet_embedder(bullet_features)  # [B, max_bullets, embed_dim]
-        wall_embeds = self.wall_embedder(wall_features)  # [B, max_walls, embed_dim]
-
-        # Create attention masks for padded entities
-        enemy_mask = torch.sum(torch.abs(enemy_features), dim=-1) < 1e-6
-        bullet_mask = torch.sum(torch.abs(bullet_features), dim=-1) < 1e-6
-        wall_mask = torch.sum(torch.abs(wall_features), dim=-1) < 1e-6
-
-        # Safe attention computation
-        enemy_context = self.safe_attention(
-            query=player_embed,
-            key=enemy_embeds,
-            value=enemy_embeds,
-            mask=enemy_mask,
-        ).squeeze(1)
-
-        bullet_context = self.safe_attention(
-            query=player_embed,
-            key=bullet_embeds,
-            value=bullet_embeds,
-            mask=bullet_mask,
-        ).squeeze(1)
-
-        wall_context = self.safe_attention(
-            query=player_embed,
-            key=wall_embeds,
-            value=wall_embeds,
-            mask=wall_mask,
-        ).squeeze(1)
-
-        # Combine all contexts
-        combined_features = torch.cat(
-            [player_embed.squeeze(1), enemy_context, bullet_context, wall_context],
-            dim=1,
-        )
-
-        # Check for NaN before final processing
-        if not torch.isfinite(combined_features).all():
-            print("Warning: NaN in combined features")
-            combined_features = torch.nan_to_num(
-                combined_features,
-                nan=0.0,
-                posinf=1.0,
-                neginf=-1.0,
-            )
-
-        # Final feature processing
-        features = self.feature_aggregator(combined_features)
-
-        # Final NaN check
-        if not torch.isfinite(features).all():
-            print("Warning: NaN in final features")
-            features = torch.nan_to_num(features, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        output = self.q_head(features) if mode == "q_learning" else self.action_head(features)
-
-        # Final output check
-        if not torch.isfinite(output).all():
-            print("Warning: NaN in output")
-            output = torch.nan_to_num(output, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        return output
-
-    def get_q_values(self, x: torch.Tensor) -> torch.Tensor:
-        return self.forward(x, mode="q_learning")
-
-    def get_action_logits(self, x: torch.Tensor) -> torch.Tensor:
-        return self.forward(x, mode="imitation")
-
-
-# Alternative: Simpler, More Stable Version
-class SimpleStableNetwork(nn.Module):
     def __init__(self, input_size: int, output_size: int, mode: str = "q_learning") -> None:
         super().__init__()
         self.mode = mode
 
-        # Much simpler approach - start with what works
         self.feature_network = nn.Sequential(
             nn.Linear(input_size, 256),
             nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 256),
-            nn.LayerNorm(256),
+            nn.Linear(256, 512),
+            nn.Dropout(0.3),
             nn.LeakyReLU(),
-            nn.Dropout(0.1),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(),
+            nn.Dropout(0.2),
             nn.Linear(256, 128),
-            nn.LayerNorm(128),
             nn.LeakyReLU(),
         )
 
-        # Output heads
-        self.q_head = nn.Linear(128, output_size)
-        self.action_head = nn.Linear(128, output_size)
+        self.q_head = nn.Sequential(
+            nn.Linear(128, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, output_size),
+        )
+        self.action_head = nn.Sequential(
+            nn.Linear(128, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, output_size),
+        )
 
         self._initialize_weights()
 
     def _initialize_weights(self) -> None:
         for module in self.modules():
             if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight, gain=0.5)
+                nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
 
     def forward(self, x: torch.Tensor, mode: str = "q_learning") -> torch.Tensor:
-        # Input validation
-        if not torch.isfinite(x).all():
-            print("Warning: NaN in input")
-            x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        features = self.feature_network(x)
-
-        # Check for NaN
-        if not torch.isfinite(features).all():
-            print("Warning: NaN in features")
-            features = torch.nan_to_num(features, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        output = self.q_head(features) if mode == "q_learning" else self.action_head(features)
-
-        # Final check
-        if not torch.isfinite(output).all():
-            print("Warning: NaN in output")
-            output = torch.nan_to_num(output, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        return output
+        x = x.to(device)
+        features = self.feature_network(x).to(device)
+        if mode == "q_learning":
+            return self.q_head(features)
+        return self.action_head(features)
 
     def get_q_values(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x, mode="q_learning")

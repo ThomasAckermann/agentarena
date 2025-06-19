@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from agentarena.agent.ml_agent import MLAgent
-from agentarena.agent.rule_based_agent import RuleBasedAgent
+from agentarena.agent.rule_based_agent_2 import RuleBasedAgent2
 from agentarena.models.config import load_config
 from agentarena.models.events import EnemyHitEvent
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig
@@ -115,7 +115,7 @@ class HybridTrainer:
             is_training=True,
             config=training_config.ml_config,
         )
-        self.enemy_agent = RuleBasedAgent()
+        self.enemy_agent = RuleBasedAgent2()
 
         # Load pretrained model if provided
         self._load_pretrained_model()
