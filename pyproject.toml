@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "2D shooting game with configurable AI agents and machine learning integration"
 authors = [{ name = "Thomas Ackermann" }]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 
 dependencies = [

@@ -8,8 +8,10 @@ import pygame
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+from agentarena.agent.agent import Agent
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
+from agentarena.agent.rule_based_agent import RuleBasedAgent
 from agentarena.models.config import load_config
 from agentarena.models.events import EnemyHitEvent, PlayerHitEvent
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
 def train(
     config: TrainingConfig,
     pretrained_model_path: str | None = None,
+    enemy_agent: Agent = RandomAgent,
 ) -> MLAgent | None:
     print(
         f"Starting ML agent training with {config.reward_type.value} reward function...",
@@ -59,8 +62,7 @@ def train(
     # Set to Q-learning mode for RL training
     player_agent.set_training_mode("q_learning")
 
-
-    enemy_agent = RandomAgent()
+    enemy_agent = enemy_agent()
 
     # Handle pre-trained model loading
     if pretrained_model_path and Path(pretrained_model_path).exists():
@@ -83,7 +85,6 @@ def train(
             # Reduce initial epsilon since we start with a good policy
             player_agent.epsilon = min(player_agent.epsilon, 0.3)
             print(f"Reduced initial epsilon to {player_agent.epsilon} for pre-trained model")
-
 
         except Exception as e:
             print(f"❌ Error loading pre-trained model: {e}")
@@ -111,7 +112,7 @@ def train(
         )
 
     # Import game here to avoid circular imports
-    from agentarena.game.game import Game
+    from agentarena.game.game import Game  # noqa: PLC0415
 
     # Create game
     game = Game(screen, player_agent, enemy_agent, clock, game_config)
@@ -396,17 +397,14 @@ def evaluate(
     # Create agents
     player_agent = MLAgent(is_training=False)
     player_agent.load_model(model_path)
-    # Ensure we're in Q-learning mode for evaluation
     player_agent.set_training_mode("q_learning")
     enemy_agent = RandomAgent()
 
     # Import game here to avoid circular imports
-    from agentarena.game.game import Game
+    from agentarena.game.game import Game  # noqa: PLC0415
 
-    # Create game
     game = Game(screen, player_agent, enemy_agent, clock, config)
 
-    # Evaluation statistics
     episode_rewards = []
     episode_lengths = []
     episode_details = []
@@ -577,8 +575,16 @@ if __name__ == "__main__":
         default=0.995,
         help="Rate at which epsilon decays",
     )
+    parser.add_argument(
+        "--enemy-agent",
+        type=str,
+        default="random",
+        help="Agent used for enemies",
+    )
 
     args = parser.parse_args()
+    agent_mapping = {"rule_based": RuleBasedAgent, "random": RandomAgent}
+    enemy_agent = agent_mapping[args.enemy_agent]
 
     # Convert reward type string to enum
     reward_type = RewardType(args.reward_type)
@@ -602,7 +608,11 @@ if __name__ == "__main__":
             ml_config=ml_config,
         )
 
-        train(config=training_config, pretrained_model_path=args.pretrained_model)
+        train(
+            config=training_config,
+            pretrained_model_path=args.pretrained_model,
+            enemy_agent=enemy_agent,
+        )
     else:
         if not args.model_path:
             parser.error("--model-path is required for evaluation mode")

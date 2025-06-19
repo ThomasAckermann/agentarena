@@ -33,18 +33,23 @@ class ObjectFactory:
         self.bullet_height = int(self.config.block_height / 2)
         self.scaled_width = int(self.config.block_width * 0.8)
         self.scaled_height = int(self.config.block_height * 0.8)
+        self.spawn_margin = 3 * self.config.block_width
+        self.min_x = self.spawn_margin
+        self.max_x = self.config.display_width - self.spawn_margin - self.scaled_width
+        self.min_y = self.spawn_margin
+        self.max_y = self.config.display_height - self.spawn_margin - self.scaled_height
 
     def create_player(self) -> Player:
-        player_position = [
-            random.randint(
-                2 * self.config.block_width,
-                self.config.display_width - 2 * self.config.block_width,
-            ),
-            random.randint(
-                2 * self.config.block_height,
-                self.config.display_height - 2 * self.config.block_height,
-            ),
-        ]
+        # Calculate safe spawn area
+        margin = 3 * self.config.block_width
+        min_x = margin
+        max_x = self.config.display_width - margin - self.scaled_width
+        min_y = margin
+        max_y = self.config.display_height - margin - self.scaled_height
+
+        player_x = random.randint(min_x, max_x)
+        player_y = random.randint(min_y, max_y)
+
         player_orientation = [0, 1]
 
         return Player(
@@ -52,25 +57,25 @@ class ObjectFactory:
             agent=self.player_agent,
             width=self.scaled_width,
             height=self.scaled_height,
-            x=player_position[0],
-            y=player_position[1],
+            x=player_x,
+            y=player_y,
             speed=self.config.player_speed,
         )
 
     def create_enemies(self, count: int) -> list[Player]:
         enemies = []
 
-        for _ in range(count):
-            enemy_position = [
-                random.randint(
-                    2 * self.config.block_width,
-                    self.config.display_width - 2 * self.config.block_width,
-                ),
-                random.randint(
-                    2 * self.config.block_height,
-                    self.config.display_height - 2 * self.config.block_height,
-                ),
-            ]
+        # Calculate safe spawn area
+        margin = 3 * self.config.block_width
+        min_x = margin
+        max_x = self.config.display_width - margin - self.scaled_width
+        min_y = margin
+        max_y = self.config.display_height - margin - self.scaled_height
+
+        for _i in range(count):
+            enemy_x = random.randint(min_x, max_x)
+            enemy_y = random.randint(min_y, max_y)
+
             enemy_orientation = [0, 1]
 
             enemies.append(
@@ -79,8 +84,8 @@ class ObjectFactory:
                     agent=self.enemy_agent,
                     width=self.scaled_width,
                     height=self.scaled_height,
-                    x=enemy_position[0],
-                    y=enemy_position[1],
+                    x=enemy_x,
+                    y=enemy_y,
                     speed=self.config.player_speed,
                 ),
             )

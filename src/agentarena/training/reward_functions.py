@@ -64,9 +64,6 @@ def _basic_reward(
         elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
             reward += 4.0  # Bonus for destroying an enemy
 
-    # Penalty for each step to encourage faster completion
-    reward -= 0.01
-
     return reward
 
 
@@ -80,16 +77,16 @@ def _advanced_reward(
     # Event-based rewards
     for event in events:
         if isinstance(event, EnemyHitEvent):
-            reward += 1.0
+            reward += 2.0
         elif isinstance(event, PlayerHitEvent):
             reward -= 1.0
         elif isinstance(event, EntityDestroyedEvent):
             if event.is_enemy_destroyed():
-                reward += 2.0  # Bonus for destroying an enemy
+                reward += 5.0  # Bonus for destroying an enemy
             elif event.is_player_destroyed():
-                reward -= 2.0  # Large penalty for dying
+                reward -= 5.0  # Large penalty for dying
         elif isinstance(event, BulletFiredEvent) and event.owner_id == "player":
-            reward -= 0.05  # Small penalty for shooting
+            reward -= 0.01
 
     if any(isinstance(event, BulletFiredEvent) for event in events):
         # Get player orientation
@@ -113,14 +110,11 @@ def _advanced_reward(
         else:
             reward += 0.5
 
-    # Small penalty for each step to encourage faster completion
-    reward -= 0.1
-
     # If we have previous observation, we can calculate more rewards
     if previous_observation:
         # Reward for moving toward enemies when health is high
         if previous_observation.player.orientation != observation.player.orientation:
-            reward += 0.2
+            reward += 0.5
         player_health = observation.player.health
 
         if (
@@ -155,7 +149,7 @@ def _advanced_reward(
             movement_intent = sum(abs(x) for x in movement_direction) > 0
 
             # If player intended to move but moved less than a small threshold
-            if movement_intent and distance_moved < 2.0:  # Threshold for detecting wall collision
+            if movement_intent and distance_moved < 1.0:  # Threshold for detecting wall collision
                 reward -= 1  # Significant penalty for hitting a wall
 
         # Reward for dodging bullets
@@ -167,7 +161,7 @@ def _advanced_reward(
 
         # Penalty for being close to too many bullets
         bullet_danger = len(observation.bullets_near_player())
-        reward -= 0.1 * bullet_danger
+        reward -= 0.5 * bullet_danger
 
     return math.tanh(reward)
 

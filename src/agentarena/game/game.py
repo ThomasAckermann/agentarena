@@ -159,7 +159,7 @@ class Game:
 
         # Check game over condition
         if self.player.health <= 0:
-            if not self.running and self.demo_logger:
+            if self.demo_logger:
                 won = len(self.enemies) == 0
                 self.demo_logger.end_episode(won=won, score=self.score)
                 print(f"📋 Demonstration episode saved! Win: {won}, Score: {self.score}")

@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader, WeightedRandomSampler
@@ -18,10 +19,26 @@ class ImitationLearner:
     ) -> None:
         self.ml_config = ml_config
         self.demonstrations_dir = demonstrations_dir
+
+        # ✅ CRITICAL FIX: Ensure device is properly set
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Print device info for debugging
+        print(f"🔥 ImitationLearner using device: {self.device}")
+        if torch.cuda.is_available():
+            print(f"🔥 GPU: {torch.cuda.get_device_name(0)}")
+            torch.cuda.empty_cache()  # Clear cache
+            print(f"🔥 Initial GPU memory: {torch.cuda.memory_allocated(0) / 1024**2:.1f}MB")
 
         # Create MLAgent with multi-head network
         self.agent = MLAgent(is_training=True, config=ml_config)
+
+        # ✅ CRITICAL FIX: Ensure agent's model is on GPU
+        self.agent.policy_net = self.agent.policy_net.to(self.device)
+
+        # Verify model is on correct device
+        model_device = next(self.agent.policy_net.parameters()).device
+        print(f"🔥 PolicyNetwork moved to: {model_device}")
 
         # Set to imitation learning mode
         self.agent.set_training_mode("imitation")
@@ -39,7 +56,6 @@ class ImitationLearner:
         balance_factor: float = 0.7,
     ) -> float:
         print(f"Starting pre-training for {epochs} epochs...")
-
         try:
             dataset = DemonstrationDataset(self.demonstrations_dir)
         except Exception as e:
@@ -69,8 +85,22 @@ class ImitationLearner:
                 [train_size, val_size],
             )
 
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                pin_memory=torch.cuda.is_available(),
+                num_workers=2 if torch.cuda.is_available() else 0,
+                persistent_workers=torch.cuda.is_available(),
+            )
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                pin_memory=torch.cuda.is_available(),
+                num_workers=2 if torch.cuda.is_available() else 0,
+                persistent_workers=torch.cuda.is_available(),
+            )
 
         writer = None
         if tensorboard_dir:
@@ -81,11 +111,17 @@ class ImitationLearner:
         for epoch in range(epochs):
             train_loss, train_accuracy = self._train_epoch(train_loader)
             val_loss, val_accuracy = self._validate_epoch(val_loader)
+            if epoch % 10 == 0:
+                self.ml_config.learning_rate = self.ml_config.learning_rate * 0.991
+
+            if torch.cuda.is_available():
+                gpu_mem = torch.cuda.memory_allocated(0) / 1024**2
 
             print(
                 f"Epoch {epoch + 1}/{epochs} - "
                 f"Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy:.3f} - "
-                f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.3f}"
+                f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.3f} - "
+                f"lr: {self.ml_config.learning_rate:.6f} - GPU: {gpu_mem:.1f}MB",
             )
 
             if writer:
@@ -93,6 +129,9 @@ class ImitationLearner:
                 writer.add_scalar("Imitation/Loss/Validation", val_loss, epoch)
                 writer.add_scalar("Imitation/Accuracy/Train", train_accuracy, epoch)
                 writer.add_scalar("Imitation/Accuracy/Validation", val_accuracy, epoch)
+                if torch.cuda.is_available():
+                    gpu_mem = torch.cuda.memory_allocated(0) / 1024**2
+                    writer.add_scalar("System/GPU_Memory_MB", gpu_mem, epoch)
 
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
@@ -149,8 +188,24 @@ class ImitationLearner:
         train_dataset = torch.utils.data.Subset(dataset, train_indices)
         val_dataset = torch.utils.data.Subset(dataset, val_indices)
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        # ✅ CRITICAL FIX: GPU-optimized DataLoaders
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=train_sampler,
+            pin_memory=torch.cuda.is_available(),  # Faster GPU transfer
+            num_workers=2 if torch.cuda.is_available() else 0,  # Parallel data loading
+            persistent_workers=torch.cuda.is_available(),  # Keep workers alive
+        )
+
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            pin_memory=torch.cuda.is_available(),  # Faster GPU transfer
+            num_workers=2 if torch.cuda.is_available() else 0,  # Parallel data loading
+            persistent_workers=torch.cuda.is_available(),  # Keep workers alive
+        )
 
         return train_loader, val_loader
 
@@ -161,9 +216,9 @@ class ImitationLearner:
         correct_predictions = 0
         total_samples = 0
 
-        for _, (states, actions) in enumerate(train_loader):
-            states = states.to(self.device)  # noqa: PLW2901
-            actions = actions.to(self.device)  # noqa: PLW2901
+        for _batch_idx, (states, actions) in enumerate(train_loader):
+            states = states.to(self.device, non_blocking=True)  # noqa: PLW2901
+            actions = actions.to(self.device, non_blocking=True)  # noqa: PLW2901
 
             # Process entire batch at once
             self.agent.optimizer.zero_grad()
@@ -181,6 +236,7 @@ class ImitationLearner:
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.agent.policy_net.parameters(), max_norm=1.0)
             self.agent.optimizer.step()
+            self.agent.scheduler.step()
 
             total_loss += loss.item()
 
@@ -203,18 +259,13 @@ class ImitationLearner:
 
         with torch.no_grad():
             for states, actions in val_loader:
-                states = states.to(self.device)  # noqa: PLW2901
-                actions = actions.to(self.device)  # noqa: PLW2901
-
-                # Get action logits
+                states = states.to(self.device, non_blocking=True)  # noqa: PLW2901
+                actions = actions.to(self.device, non_blocking=True)  # noqa: PLW2901
                 action_logits = self.agent.policy_net.get_action_logits(states)
-
-                # Calculate loss
                 target_indices = torch.argmax(actions, dim=1)
                 loss = torch.nn.functional.cross_entropy(action_logits, target_indices)
                 total_loss += loss.item()
 
-                # Calculate accuracy
                 predicted = torch.argmax(action_logits, dim=1)
                 correct_predictions += (predicted == target_indices).sum().item()
                 total_samples += target_indices.size(0)
@@ -230,10 +281,12 @@ def pretrain_agent(
     batch_size: int = 64,
     learning_rate: float = 0.001,
     save_path: str = "models/pretrained_agent.pt",
-    tensorboard_dir: str = "runs/pretraining",
+    tensorboard_dir: str = f"runs/pretraining{datetime.now().strftime('%Y%m%d_%H%M%S')}",
     balance_actions: bool = True,
     balance_factor: float = 0.7,
 ) -> str:
+    print("🚀 Starting GPU-accelerated pretraining...")
+
     ml_config = MLAgentConfig(learning_rate=learning_rate)
 
     learner = ImitationLearner(ml_config, demonstrations_dir)

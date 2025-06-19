@@ -70,6 +70,8 @@ def main() -> None:
     # Create enemy agent based on arguments
     if args.enemy == "random":
         enemy_agent = RandomAgent(name="RandomEnemy")
+    elif args.enemy == "rule_based":
+        enemy_agent = RuleBasedAgent(name="RuleBasedEnemy")
     elif args.enemy == "ml":
         if not args.ml_model:
             print("Error: --ml-model is required when using ML agent")

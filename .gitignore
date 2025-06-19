@@ -9,6 +9,7 @@ runs/
 demonstrations/
 *.log
 models/
+dataset_full/
 
 
 # Byte-compiled / optimized / DLL files

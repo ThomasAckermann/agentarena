@@ -10,7 +10,7 @@ from agentarena.models.action import Action, Direction
 from agentarena.models.observations import GameObservation
 from agentarena.models.training import Experience, MLAgentConfig
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 MAX_RECENT_ACTIONS: int = 100
@@ -32,7 +32,7 @@ STATE_SIZE = (
 
 
 class PrioritizedReplay:
-    def __init__(self, capacity: int = 10000, winning_bonus: float = 10.0) -> None:
+    def __init__(self, capacity: int = 50000, winning_bonus: float = 10.0) -> None:
         self.capacity = capacity
         self.memory = []
         self.priorities = []
@@ -81,28 +81,25 @@ class PolicyNetwork(nn.Module):
         self.feature_network = nn.Sequential(
             nn.Linear(input_size, 256),
             nn.LayerNorm(256),
-            nn.Sigmoid(),
+            nn.LeakyReLU(),
             nn.Linear(256, 512),
             nn.Dropout(0.3),
-            nn.Sigmoid(),
+            nn.LeakyReLU(),
             nn.Linear(512, 256),
-            nn.Sigmoid(),
+            nn.LeakyReLU(),
             nn.Dropout(0.2),
             nn.Linear(256, 128),
-            nn.Sigmoid(),
-            nn.Linear(128, 64),
-            nn.LayerNorm(64),
-            nn.Sigmoid(),
+            nn.LeakyReLU(),
         )
 
         self.q_head = nn.Sequential(
-            nn.Linear(64, 32),
-            nn.Sigmoid(),
+            nn.Linear(128, 32),
+            nn.LeakyReLU(),
             nn.Linear(32, output_size),
         )
         self.action_head = nn.Sequential(
-            nn.Linear(64, 32),
-            nn.Sigmoid(),
+            nn.Linear(128, 32),
+            nn.LeakyReLU(),
             nn.Linear(32, output_size),
         )
 
@@ -116,7 +113,8 @@ class PolicyNetwork(nn.Module):
                     nn.init.constant_(module.bias, 0.0)
 
     def forward(self, x: torch.Tensor, mode: str = "q_learning") -> torch.Tensor:
-        features = self.feature_network(x)
+        x = x.to(device)
+        features = self.feature_network(x).to(device)
         if mode == "q_learning":
             return self.q_head(features)
         return self.action_head(features)
@@ -319,9 +317,9 @@ class MLAgent(Agent):
             + len(wall_features)
         )
 
-        assert (
-            len(state) == expected_size
-        ), f"State size mismatch: got {len(state)}, expected {expected_size}"
+        assert len(state) == expected_size, (
+            f"State size mismatch: got {len(state)}, expected {expected_size}"
+        )
 
         return np.array(state, dtype=np.float32)
 
@@ -379,7 +377,7 @@ class MLAgent(Agent):
 
         if self.is_training:
             self.recent_actions.append(action_idx)
-            if len(self.recent_actions) > 100:  # noqa: PLR2004
+            if len(self.recent_actions) > 100:
                 self.recent_actions.pop(0)
 
         self.policy_net.train(training_mode)
@@ -409,7 +407,7 @@ class MLAgent(Agent):
         if not self.is_training or self.last_state is None or self.last_action is None:
             return
 
-        if len(self.recent_actions) > 20:  # noqa: PLR2004
+        if len(self.recent_actions) > 20:
             action_counts = {}
             for a in self.recent_actions:
                 action_counts[a] = action_counts.get(a, 0) + 1
