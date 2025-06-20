@@ -1,5 +1,6 @@
 import argparse  # noqa: INP001
 import pickle
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from agentarena.agent.ml_agent import MLAgent
+from agentarena.agent.random_agent import RandomAgent
+from agentarena.agent.rule_based_agent import RuleBasedAgent
 from agentarena.agent.rule_based_agent_2 import RuleBasedAgent2
 from agentarena.models.config import load_config
 from agentarena.models.events import EnemyHitEvent
@@ -286,6 +289,7 @@ class HybridTrainer:
                     max_norm=1.0,
                 )
                 self.player_agent.optimizer.step()
+                self.player_agent.scheduler.step()
 
                 epoch_loss += loss.item()
                 with torch.no_grad():
@@ -305,7 +309,8 @@ class HybridTrainer:
             if self.hybrid_config.offline_epochs_per_episode > 1:
                 print(
                     f"    Epoch {epoch + 1}/{self.hybrid_config.offline_epochs_per_episode}"
-                    f" - Loss: {avg_epoch_loss:.4f}, Acc: {avg_epoch_accuracy:.3f}",
+                    f" - Loss: {avg_epoch_loss:.4f}, Acc: {avg_epoch_accuracy:.3f},"
+                    f" - lr: {self.player_agent.learning_rate}",
                 )
                 self.writer.add_scalar(f"Loss/Offline_Epoch_{epoch + 1}", avg_epoch_loss, episode)
                 self.writer.add_scalar(
@@ -348,6 +353,7 @@ class HybridTrainer:
         from agentarena.game.game import Game  # noqa: PLC0415
 
         self.player_agent.set_training_mode("q_learning")
+        self.enemy_agent = random.choice([RuleBasedAgent2(), RuleBasedAgent(), RandomAgent()])
 
         game = Game(self.screen, self.player_agent, self.enemy_agent, self.clock, self.game_config)
         game.reset()

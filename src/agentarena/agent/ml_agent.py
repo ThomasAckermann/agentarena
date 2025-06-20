@@ -73,6 +73,9 @@ class PrioritizedReplay:
         return len(self.memory)
 
 
+import torch
+
+
 class PolicyNetwork(nn.Module):
     def __init__(self, input_size: int, output_size: int, mode: str = "q_learning") -> None:  # noqa: ARG002
         super().__init__()
@@ -87,63 +90,103 @@ class PolicyNetwork(nn.Module):
         self.MAX_BULLETS = 12
         self.MAX_WALLS = 120
 
-        # Smaller embedding dimension for stability
-        self.embed_dim = 64
+        # Embedding dimension
+        self.embed_dim = 128
 
         # Feature embedders with proper initialization and normalization
         self.player_embedder = nn.Sequential(
-            nn.Linear(self.PLAYER_FEATURES, 32),
-            nn.LayerNorm(32),
+            nn.Linear(self.PLAYER_FEATURES, 256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Linear(32, self.embed_dim),
+            nn.Linear(256, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
         self.enemy_embedder = nn.Sequential(
-            nn.Linear(self.ENEMY_FEATURES, 32),
-            nn.LayerNorm(32),
+            nn.Linear(self.ENEMY_FEATURES, 256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Linear(32, self.embed_dim),
+            nn.Linear(256, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
         self.bullet_embedder = nn.Sequential(
-            nn.Linear(self.BULLET_FEATURES, 32),
-            nn.LayerNorm(32),
+            nn.Linear(self.BULLET_FEATURES, 256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Linear(32, self.embed_dim),
+            nn.Linear(256, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
         self.wall_embedder = nn.Sequential(
-            nn.Linear(self.WALL_FEATURES_PER_WALL, 16),
-            nn.LayerNorm(16),
+            nn.Linear(self.WALL_FEATURES_PER_WALL, 256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Linear(16, self.embed_dim),
+            nn.Linear(256, 128),
+            nn.LayerNorm(128),
+            nn.LeakyReLU(),
+            nn.Linear(128, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
-        # Learnable temperature for attention scaling (instead of fixed sqrt(d))
-        self.temperature = nn.Parameter(torch.ones(1) * np.sqrt(self.embed_dim))
+        # MultiheadAttention layers for each entity type
+        self.enemy_attention = nn.MultiheadAttention(
+            embed_dim=self.embed_dim,
+            num_heads=4,
+            dropout=0.1,
+            batch_first=True,
+        )
+
+        self.bullet_attention = nn.MultiheadAttention(
+            embed_dim=self.embed_dim,
+            num_heads=4,
+            dropout=0.1,
+            batch_first=True,
+        )
+
+        self.wall_attention = nn.MultiheadAttention(
+            embed_dim=self.embed_dim,
+            num_heads=4,
+            dropout=0.1,
+            batch_first=True,
+        )
 
         # Feature aggregation with proper normalization
         self.feature_aggregator = nn.Sequential(
-            nn.Linear(self.embed_dim * 4, 256),
+            nn.Linear(self.embed_dim * 4, 512),
+            nn.LayerNorm(512),
+            nn.LeakyReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, 256),
             nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Dropout(0.1),  # Reduced dropout
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
+            nn.Linear(256, 256),
+            nn.Dropout(0.2),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
         )
 
         # Output heads with smaller initial weights
-        self.q_head = nn.Sequential(nn.Linear(128, 64), nn.LeakyReLU(), nn.Linear(64, output_size))
+        self.q_head = nn.Sequential(
+            nn.Linear(256, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 64),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, output_size),
+        )
 
         self.action_head = nn.Sequential(
-            nn.Linear(128, 64),
+            nn.Linear(256, 256),
             nn.LeakyReLU(),
-            nn.Linear(64, output_size),
+            nn.Linear(256, 64),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, output_size),
         )
 
         self._initialize_weights()
@@ -160,8 +203,8 @@ class PolicyNetwork(nn.Module):
                 nn.init.constant_(module.bias, 0.0)
                 nn.init.constant_(module.weight, 1.0)
 
-    def safe_attention(self, query, key, value, mask=None):
-        """Numerically stable attention computation"""
+    def safe_multihead_attention(self, attention_layer, query, key, value, key_padding_mask=None):
+        """Safely apply multihead attention with NaN handling"""
         # Ensure inputs are finite
         if not torch.isfinite(query).all():
             query = torch.nan_to_num(query, nan=0.0, posinf=1.0, neginf=-1.0)
@@ -170,30 +213,28 @@ class PolicyNetwork(nn.Module):
         if not torch.isfinite(value).all():
             value = torch.nan_to_num(value, nan=0.0, posinf=1.0, neginf=-1.0)
 
-        # Compute attention scores with learnable temperature
-        scores = torch.matmul(query, key.transpose(-2, -1)) / torch.clamp(
-            self.temperature,
-            min=1e-6,
-        )
+        try:
+            # Apply attention
+            attended_output, attention_weights = attention_layer(
+                query=query,
+                key=key,
+                value=value,
+                key_padding_mask=key_padding_mask,
+                need_weights=False,  # We don't need weights for efficiency
+            )
 
-        # Apply mask if provided
-        if mask is not None:
-            scores = scores.masked_fill(mask.unsqueeze(1), float("-inf"))
+            # Check for NaN in output
+            if not torch.isfinite(attended_output).all():
+                print("Warning: NaN in attention output, using fallback")
+                # Fallback: just return the query (no attention)
+                return query
 
-        # Numerical stability: subtract max for softmax
-        scores_max = scores.max(dim=-1, keepdim=True)[0]
-        scores = scores - scores_max
+            return attended_output  # noqa: TRY300
 
-        # Apply softmax with numerical stability
-        attn_weights = F.softmax(scores, dim=-1)
-
-        # Check for NaN in attention weights
-        if not torch.isfinite(attn_weights).all():
-            seq_len = attn_weights.size(-1)
-            attn_weights = torch.ones_like(attn_weights) / seq_len
-
-        # Apply attention
-        return torch.matmul(attn_weights, value)
+        except Exception as e:
+            print(f"Warning: Attention computation failed ({e}), using fallback")
+            # Fallback: return query unchanged
+            return query
 
     def forward(self, x: torch.Tensor, mode: str = "q_learning") -> torch.Tensor:
         # Check input for NaN
@@ -225,32 +266,38 @@ class PolicyNetwork(nn.Module):
         bullet_embeds = self.bullet_embedder(bullet_features)  # [B, max_bullets, embed_dim]
         wall_embeds = self.wall_embedder(wall_features)  # [B, max_walls, embed_dim]
 
-        # Create attention masks for padded entities
-        enemy_mask = torch.sum(torch.abs(enemy_features), dim=-1) < 1e-6
-        bullet_mask = torch.sum(torch.abs(bullet_features), dim=-1) < 1e-6
-        wall_mask = torch.sum(torch.abs(wall_features), dim=-1) < 1e-6
+        # Create padding masks for MultiheadAttention
+        # True values indicate positions that should be ignored
+        enemy_padding_mask = torch.sum(torch.abs(enemy_features), dim=-1) < 1e-6  # [B, max_enemies]
+        bullet_padding_mask = (
+            torch.sum(torch.abs(bullet_features), dim=-1) < 1e-6
+        )  # [B, max_bullets]
+        wall_padding_mask = torch.sum(torch.abs(wall_features), dim=-1) < 1e-6  # [B, max_walls]
 
-        # Safe attention computation
-        enemy_context = self.safe_attention(
-            query=player_embed,
-            key=enemy_embeds,
-            value=enemy_embeds,
-            mask=enemy_mask,
-        ).squeeze(1)
+        # Apply multihead attention using player as query and entities as key/value
+        enemy_context = self.safe_multihead_attention(
+            attention_layer=self.enemy_attention,
+            query=player_embed,  # [B, 1, embed_dim]
+            key=enemy_embeds,  # [B, max_enemies, embed_dim]
+            value=enemy_embeds,  # [B, max_enemies, embed_dim]
+            key_padding_mask=enemy_padding_mask,  # [B, max_enemies]
+        ).squeeze(1)  # [B, embed_dim]
 
-        bullet_context = self.safe_attention(
-            query=player_embed,
-            key=bullet_embeds,
-            value=bullet_embeds,
-            mask=bullet_mask,
-        ).squeeze(1)
+        bullet_context = self.safe_multihead_attention(
+            attention_layer=self.bullet_attention,
+            query=player_embed,  # [B, 1, embed_dim]
+            key=bullet_embeds,  # [B, max_bullets, embed_dim]
+            value=bullet_embeds,  # [B, max_bullets, embed_dim]
+            key_padding_mask=bullet_padding_mask,  # [B, max_bullets]
+        ).squeeze(1)  # [B, embed_dim]
 
-        wall_context = self.safe_attention(
-            query=player_embed,
-            key=wall_embeds,
-            value=wall_embeds,
-            mask=wall_mask,
-        ).squeeze(1)
+        wall_context = self.safe_multihead_attention(
+            attention_layer=self.wall_attention,
+            query=player_embed,  # [B, 1, embed_dim]
+            key=wall_embeds,  # [B, max_walls, embed_dim]
+            value=wall_embeds,  # [B, max_walls, embed_dim]
+            key_padding_mask=wall_padding_mask,  # [B, max_walls]
+        ).squeeze(1)  # [B, embed_dim]
 
         # Combine all contexts
         combined_features = torch.cat(
@@ -268,9 +315,7 @@ class PolicyNetwork(nn.Module):
                 neginf=-1.0,
             )
 
-        # Final feature processing
         features = self.feature_aggregator(combined_features)
-
         # Final NaN check
         if not torch.isfinite(features).all():
             print("Warning: NaN in final features")
@@ -279,69 +324,6 @@ class PolicyNetwork(nn.Module):
         output = self.q_head(features) if mode == "q_learning" else self.action_head(features)
 
         # Final output check
-        if not torch.isfinite(output).all():
-            print("Warning: NaN in output")
-            output = torch.nan_to_num(output, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        return output
-
-    def get_q_values(self, x: torch.Tensor) -> torch.Tensor:
-        return self.forward(x, mode="q_learning")
-
-    def get_action_logits(self, x: torch.Tensor) -> torch.Tensor:
-        return self.forward(x, mode="imitation")
-
-
-# Alternative: Simpler, More Stable Version
-class SimpleStableNetwork(nn.Module):
-    def __init__(self, input_size: int, output_size: int, mode: str = "q_learning") -> None:
-        super().__init__()
-        self.mode = mode
-
-        # Much simpler approach - start with what works
-        self.feature_network = nn.Sequential(
-            nn.Linear(input_size, 256),
-            nn.LayerNorm(256),
-            nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 256),
-            nn.LayerNorm(256),
-            nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
-            nn.LeakyReLU(),
-        )
-
-        # Output heads
-        self.q_head = nn.Linear(128, output_size)
-        self.action_head = nn.Linear(128, output_size)
-
-        self._initialize_weights()
-
-    def _initialize_weights(self) -> None:
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight, gain=0.5)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
-
-    def forward(self, x: torch.Tensor, mode: str = "q_learning") -> torch.Tensor:
-        # Input validation
-        if not torch.isfinite(x).all():
-            print("Warning: NaN in input")
-            x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        features = self.feature_network(x)
-
-        # Check for NaN
-        if not torch.isfinite(features).all():
-            print("Warning: NaN in features")
-            features = torch.nan_to_num(features, nan=0.0, posinf=1.0, neginf=-1.0)
-
-        output = self.q_head(features) if mode == "q_learning" else self.action_head(features)
-
-        # Final check
         if not torch.isfinite(output).all():
             print("Warning: NaN in output")
             output = torch.nan_to_num(output, nan=0.0, posinf=1.0, neginf=-1.0)
@@ -387,8 +369,8 @@ class MLAgent(Agent):
             self.epsilon_min = epsilon_min  # Minimum exploration rate
             self.epsilon_decay = epsilon_decay  # Decay rate for exploration
             self.learning_rate = learning_rate  # Learning rate
-            self.batch_size = 64
-            self.memory_capacity = 10000
+            self.batch_size = 256
+            self.memory_capacity = 20000
 
         self.directions = [
             None,
