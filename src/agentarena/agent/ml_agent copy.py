@@ -88,41 +88,41 @@ class PolicyNetwork(nn.Module):
         self.MAX_WALLS = 120
 
         # Embedding dimension
-        self.embed_dim = 64
+        self.embed_dim = 128
 
         # Feature embedders with proper initialization and normalization
         self.player_embedder = nn.Sequential(
-            nn.Linear(self.PLAYER_FEATURES, 64),
-            nn.LayerNorm(64),
-            nn.LeakyReLU(),
-            nn.Linear(64, self.embed_dim),
-            nn.LayerNorm(self.embed_dim),
-        )
-
-        self.enemy_embedder = nn.Sequential(
-            nn.Linear(self.ENEMY_FEATURES, 128),
+            nn.Linear(self.PLAYER_FEATURES, 128),
             nn.LayerNorm(128),
             nn.LeakyReLU(),
             nn.Linear(128, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
-        self.bullet_embedder = nn.Sequential(
-            nn.Linear(self.BULLET_FEATURES, 64),
-            nn.LayerNorm(64),
+        self.enemy_embedder = nn.Sequential(
+            nn.Linear(self.ENEMY_FEATURES, 256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Linear(64, self.embed_dim),
+            nn.Linear(256, self.embed_dim),
+            nn.LayerNorm(self.embed_dim),
+        )
+
+        self.bullet_embedder = nn.Sequential(
+            nn.Linear(self.BULLET_FEATURES, 128),
+            nn.LayerNorm(128),
+            nn.LeakyReLU(),
+            nn.Linear(128, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
         self.wall_embedder = nn.Sequential(
-            nn.Linear(self.WALL_FEATURES_PER_WALL, 128),
+            nn.Linear(self.WALL_FEATURES_PER_WALL, 256),
+            nn.LayerNorm(256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 128),
             nn.LayerNorm(128),
             nn.LeakyReLU(),
-            nn.Linear(128, 64),
-            nn.LayerNorm(64),
-            nn.LeakyReLU(),
-            nn.Linear(64, self.embed_dim),
+            nn.Linear(128, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
@@ -150,16 +150,18 @@ class PolicyNetwork(nn.Module):
 
         # Feature aggregation with proper normalization
         self.feature_aggregator = nn.Sequential(
-            nn.Linear(self.embed_dim * 4, 256),
+            nn.Linear(self.embed_dim * 4, 512),
+            nn.LayerNorm(512),
+            nn.LeakyReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, 256),
             nn.LayerNorm(256),
             nn.LeakyReLU(),
+            nn.Linear(256, 256),
             nn.Dropout(0.2),
-            nn.Linear(256, 128),
-            nn.LayerNorm(128),
+            nn.LayerNorm(256),
             nn.LeakyReLU(),
-            nn.Linear(128, 128),
-            nn.Dropout(0.2),
-            nn.LayerNorm(128),
+            nn.Linear(256, 128),
             nn.LeakyReLU(),
             nn.Linear(128, 64),
             nn.LayerNorm(64),
