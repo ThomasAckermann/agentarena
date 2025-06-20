@@ -63,6 +63,7 @@ def _basic_reward(
             reward -= 1.0
         elif isinstance(event, EntityDestroyedEvent) and event.is_enemy_destroyed():
             reward += 4.0  # Bonus for destroying an enemy
+    reward -= 0.01
 
     return reward
 

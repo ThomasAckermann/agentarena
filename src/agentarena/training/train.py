@@ -1,9 +1,11 @@
 import argparse
 import pickle
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pygame
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -12,6 +14,7 @@ from agentarena.agent.agent import Agent
 from agentarena.agent.ml_agent import MLAgent
 from agentarena.agent.random_agent import RandomAgent
 from agentarena.agent.rule_based_agent import RuleBasedAgent
+from agentarena.agent.rule_based_agent_2 import RuleBasedAgent2
 from agentarena.models.config import load_config
 from agentarena.models.events import EnemyHitEvent, PlayerHitEvent
 from agentarena.models.training import EpisodeResult, MLAgentConfig, TrainingConfig, TrainingResults
@@ -19,6 +22,8 @@ from agentarena.training.reward_functions import RewardType, calculate_reward
 
 if TYPE_CHECKING:
     from agentarena.models.observations import GameObservation
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def train(
@@ -249,7 +254,7 @@ def train(
                 # Sample a batch of states for visualization
                 if len(player_agent.memory) > 32:
                     sample = player_agent.memory.sample(32)
-                    states = torch.FloatTensor([exp.state for exp in sample])
+                    states = torch.FloatTensor(np.array([exp.state for exp in sample])).to(device)
                     with torch.no_grad():
                         # Use Q-learning head for Q-values
                         q_values = player_agent.policy_net.get_q_values(states)
@@ -583,7 +588,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    agent_mapping = {"rule_based": RuleBasedAgent, "random": RandomAgent}
+    agent_mapping = {
+        "rule_based": RuleBasedAgent,
+        "rule_based_2": RuleBasedAgent2,
+        "random": RandomAgent,
+        "all": random.choice([RuleBasedAgent, RuleBasedAgent2, RandomAgent]),
+    }
     enemy_agent = agent_mapping[args.enemy_agent]
 
     # Convert reward type string to enum
