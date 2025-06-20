@@ -2,6 +2,7 @@
 """Script to pre-train agent on demonstrations using multi-head network."""
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 from agentarena.training.pretraining import pretrain_agent
@@ -21,7 +22,7 @@ def main():
     parser.add_argument("--output", default="models/pretrained_agent.pt", help="Output model path")
     parser.add_argument(
         "--tensorboard-dir",
-        default="runs/pretraining",
+        default=f"runs/pretraining{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         help="TensorBoard log directory",
     )
     parser.add_argument(

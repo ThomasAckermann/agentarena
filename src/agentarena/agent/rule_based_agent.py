@@ -26,12 +26,12 @@ class RuleBasedAgent(Agent):
         super().__init__(name)
 
         # Behavioral parameters
-        self.danger_radius = 150.0
-        self.attack_range = 250.0
-        self.min_attack_range = 80.0  # Increased minimum distance
-        self.optimal_attack_range = 120.0  # Sweet spot for engagement
-        self.max_engagement_range = 200.0  # Maximum effective range
-        self.wall_avoidance_distance = 80.0
+        self.danger_radius = 250.0
+        self.attack_range = 350.0
+        self.min_attack_range = 150.0  # Increased minimum distance
+        self.optimal_attack_range = 180.0  # Sweet spot for engagement
+        self.max_engagement_range = 350.0  # Maximum effective range
+        self.wall_avoidance_distance = 100.0
 
         # Shooting behavior parameters
         self.shooting_probability = 0.4

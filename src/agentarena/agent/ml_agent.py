@@ -73,9 +73,6 @@ class PrioritizedReplay:
         return len(self.memory)
 
 
-import torch
-
-
 class PolicyNetwork(nn.Module):
     def __init__(self, input_size: int, output_size: int, mode: str = "q_learning") -> None:  # noqa: ARG002
         super().__init__()
@@ -95,10 +92,10 @@ class PolicyNetwork(nn.Module):
 
         # Feature embedders with proper initialization and normalization
         self.player_embedder = nn.Sequential(
-            nn.Linear(self.PLAYER_FEATURES, 256),
-            nn.LayerNorm(256),
+            nn.Linear(self.PLAYER_FEATURES, 128),
+            nn.LayerNorm(128),
             nn.LeakyReLU(),
-            nn.Linear(256, self.embed_dim),
+            nn.Linear(128, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
@@ -111,10 +108,10 @@ class PolicyNetwork(nn.Module):
         )
 
         self.bullet_embedder = nn.Sequential(
-            nn.Linear(self.BULLET_FEATURES, 256),
-            nn.LayerNorm(256),
+            nn.Linear(self.BULLET_FEATURES, 128),
+            nn.LayerNorm(128),
             nn.LeakyReLU(),
-            nn.Linear(256, self.embed_dim),
+            nn.Linear(128, self.embed_dim),
             nn.LayerNorm(self.embed_dim),
         )
 
@@ -164,26 +161,21 @@ class PolicyNetwork(nn.Module):
             nn.Dropout(0.2),
             nn.LayerNorm(256),
             nn.LeakyReLU(),
+            nn.Linear(256, 128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 64),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
         )
 
         # Output heads with smaller initial weights
         self.q_head = nn.Sequential(
-            nn.Linear(256, 256),
-            nn.LeakyReLU(),
-            nn.Linear(256, 64),
-            nn.LayerNorm(64),
-            nn.LeakyReLU(),
             nn.Linear(64, 32),
             nn.LeakyReLU(),
             nn.Linear(32, output_size),
         )
 
         self.action_head = nn.Sequential(
-            nn.Linear(256, 256),
-            nn.LeakyReLU(),
-            nn.Linear(256, 64),
-            nn.LayerNorm(64),
-            nn.LeakyReLU(),
             nn.Linear(64, 32),
             nn.LeakyReLU(),
             nn.Linear(32, output_size),

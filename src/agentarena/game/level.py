@@ -16,10 +16,10 @@ from agentarena.models.entities import WallModel
 # Constants for level generation
 BUFFER_BLOCKS = 2  # Blocks of space around entities
 MARGIN_BLOCKS = 2  # Margin from edge of screen for random walls
-MIN_CLUSTERS = 2  # Minimum number of wall clusters
-MAX_CLUSTERS = 10  # Maximum number of wall clusters
-MIN_RANDOM_WALLS = 3  # Minimum random walls to add if not enough clusters
-MAX_RANDOM_WALLS = 10  # Maximum random walls to add if not enough clusters
+MIN_CLUSTERS = 10  # Minimum number of wall clusters
+MAX_CLUSTERS = 15  # Maximum number of wall clusters
+MIN_RANDOM_WALLS = 5  # Minimum random walls to add if not enough clusters
+MAX_RANDOM_WALLS = 15  # Maximum random walls to add if not enough clusters
 
 
 class Level:

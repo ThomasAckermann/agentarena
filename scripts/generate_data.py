@@ -17,7 +17,7 @@ def run_data_collection(num_runs: int = 10, agent_type: str = "rule_based"):
             # Set environment to handle Unicode properly
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
-            enemy_agent_str = random.choice(["rule_based_2", "rule_based"])
+            enemy_agent_str = random.choice(["rule_based_2", "rule_based", "random"])
 
             # Run the main function
             subprocess.run(
